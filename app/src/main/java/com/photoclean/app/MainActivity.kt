@@ -2,6 +2,7 @@ package com.photoclean.app
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -67,6 +68,7 @@ class MainActivity : Activity() {
     private val cache = LruCache<Long, Bitmap>(4)
     private var loadToken = 0
     private var loaded = false
+    private var askedManageThisSession = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,6 +100,25 @@ class MainActivity : Activity() {
         super.onResume()
         updateManageBanner()
         if (!loaded && hasReadPermission()) loadPhotos()
+        if (hasReadPermission() && !askedManageThisSession) {
+            askedManageThisSession = true
+            if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) showManageMediaDialog(null)
+        }
+    }
+
+    /** 확인창 없이 바로 지우려면 '미디어 관리' 권한이 필요하다고 안내. */
+    private fun showManageMediaDialog(onSkip: (() -> Unit)?) {
+        val b = AlertDialog.Builder(this)
+            .setTitle("버튼 한 번에 바로 삭제")
+            .setMessage(
+                "휴지통 버튼을 누를 때마다 뜨는 확인창을 없애려면\n" +
+                    "'미디어 관리' 권한을 켜주세요.\n\n" +
+                    "다음 화면에서 '사진 정리'의 스위치를 켜고 돌아오면 됩니다."
+            )
+            .setPositiveButton("권한 켜기") { _, _ -> requestManageMedia() }
+        if (onSkip != null) b.setNegativeButton("이번만 그냥 삭제") { _, _ -> onSkip() }
+        else b.setNegativeButton("나중에", null)
+        b.show()
     }
 
     override fun onDestroy() {
@@ -318,6 +339,15 @@ class MainActivity : Activity() {
     // ---------------------------------------------------------------- 휴지통
 
     private fun trashCurrent() {
+        if (photos.isEmpty() || busy) return
+        if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) {
+            showManageMediaDialog { doTrash() }
+            return
+        }
+        doTrash()
+    }
+
+    private fun doTrash() {
         if (photos.isEmpty() || busy) return
         val p = photos[index]
         pendingTrash = p

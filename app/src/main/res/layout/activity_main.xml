@@ -1,11 +1,96 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
-    android:fitsSystemWindows="true"
+    android:fitsSystemWindows="true">
+
+<!-- ===================== 전체 사진(그리드) 화면 ===================== -->
+<LinearLayout
+    android:id="@+id/gridScreen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="사진 정리"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/gridCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#AAAAAA"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/gridBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FF8F00"
+        android:padding="10dp"
+        android:text="⚡ 탭해서 '미디어 관리' 권한을 켜면 확인창 없이 버튼 한 번에 바로 휴지통으로 보내집니다"
+        android:textColor="#000000"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <GridView
+            android:id="@+id/grid"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:horizontalSpacing="2dp"
+            android:verticalSpacing="2dp"
+            android:numColumns="4"
+            android:stretchMode="columnWidth" />
+
+        <TextView
+            android:id="@+id/gridEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="24dp"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:visibility="gone" />
+
+        <ProgressBar
+            android:id="@+id/gridLoading"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>
+
+<!-- ===================== 한 장씩 보기 화면 ===================== -->
+<LinearLayout
+    android:id="@+id/viewerScreen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:clickable="true"
+    android:orientation="vertical"
+    android:visibility="gone">
 
     <!-- 상단 바 -->
     <LinearLayout
@@ -14,6 +99,17 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:padding="12dp">
+
+        <Button
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/btn_small"
+            android:paddingHorizontal="14dp"
+            android:text="‹ 전체"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -141,3 +237,4 @@
             android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>
+</FrameLayout>

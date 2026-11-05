@@ -17,6 +17,10 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.text.format.Formatter
 import android.util.LruCache
+import android.util.Size
+import android.view.ViewGroup
+import android.widget.BaseAdapter
+import android.widget.GridView
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -51,6 +55,19 @@ class MainActivity : Activity() {
     private lateinit var btnKeep: Button
     private lateinit var btnPrev: Button
     private lateinit var btnUndo: Button
+    private lateinit var btnBack: Button
+    private lateinit var gridScreen: View
+    private lateinit var viewerScreen: View
+    private lateinit var grid: GridView
+    private lateinit var gridCount: TextView
+    private lateinit var gridEmpty: TextView
+    private lateinit var gridLoading: ProgressBar
+    private lateinit var gridBanner: TextView
+    private val gridAdapter = GridAdapter()
+    private val thumbIo = Executors.newFixedThreadPool(3)
+    private val thumbCache = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
+        override fun sizeOf(key: Long, value: Bitmap) = value.allocationByteCount
+    }
 
     private val photos = mutableListOf<Photo>()
     private var index = 0
@@ -84,6 +101,19 @@ class MainActivity : Activity() {
         btnKeep = findViewById(R.id.btnKeep)
         btnPrev = findViewById(R.id.btnPrev)
         btnUndo = findViewById(R.id.btnUndo)
+        btnBack = findViewById(R.id.btnBack)
+        gridScreen = findViewById(R.id.gridScreen)
+        viewerScreen = findViewById(R.id.viewerScreen)
+        grid = findViewById(R.id.grid)
+        gridCount = findViewById(R.id.gridCount)
+        gridEmpty = findViewById(R.id.gridEmpty)
+        gridLoading = findViewById(R.id.gridLoading)
+        gridBanner = findViewById(R.id.gridBanner)
+
+        grid.adapter = gridAdapter
+        grid.setOnItemClickListener { _, _, pos, _ -> openViewer(pos) }
+        btnBack.setOnClickListener { showGrid() }
+        gridBanner.setOnClickListener { requestManageMedia() }
 
         btnTrash.setOnClickListener { trashCurrent() }
         btnKeep.setOnClickListener { move(+1) }
@@ -124,6 +154,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         io.shutdownNow()
+        thumbIo.shutdownNow()
     }
 
     // ---------------------------------------------------------------- 권한
@@ -149,8 +180,8 @@ class MainActivity : Activity() {
         if (hasReadPermission()) {
             loadPhotos()
         } else {
-            showEmpty("사진 접근 권한이 필요해요.\n\n여기를 탭해서 다시 요청하거나\n설정 > 애플리케이션 > 사진 정리 > 권한에서 허용해 주세요.")
-            emptyText.setOnClickListener {
+            showGridMessage("사진 접근 권한이 필요해요.\n\n여기를 탭해서 다시 요청하거나\n설정 > 애플리케이션 > 사진 정리 > 권한에서 허용해 주세요.")
+            gridEmpty.setOnClickListener {
                 if (shouldShowRequestPermissionRationale(readPermissions()[0])) {
                     requestReadPermission()
                 } else {
@@ -167,8 +198,9 @@ class MainActivity : Activity() {
         Build.VERSION.SDK_INT >= 31 && MediaStore.canManageMedia(this)
 
     private fun updateManageBanner() {
-        manageBanner.visibility =
-            if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) View.VISIBLE else View.GONE
+        val v = if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) View.VISIBLE else View.GONE
+        manageBanner.visibility = v
+        gridBanner.visibility = v
     }
 
     private fun requestManageMedia() {
@@ -185,15 +217,16 @@ class MainActivity : Activity() {
     private fun loadPhotos() {
         loaded = true
         emptyText.setOnClickListener(null)
-        loading.visibility = View.VISIBLE
+        gridEmpty.setOnClickListener(null)
+        gridLoading.visibility = View.VISIBLE
         io.execute {
             val list = queryPhotos()
             main.post {
                 photos.clear()
                 photos.addAll(list)
                 index = 0
-                loading.visibility = View.GONE
-                show()
+                gridLoading.visibility = View.GONE
+                showGrid()
             }
         }
     }
@@ -235,6 +268,75 @@ class MainActivity : Activity() {
 
     // ---------------------------------------------------------------- 화면 표시
 
+    // ---------------------------------------------------------------- 전체 보기(그리드)
+
+    private fun showGridMessage(msg: String) {
+        gridEmpty.text = msg
+        gridEmpty.visibility = View.VISIBLE
+    }
+
+    private fun showGrid() {
+        viewerScreen.visibility = View.GONE
+        gridScreen.visibility = View.VISIBLE
+        gridAdapter.notifyDataSetChanged()
+        gridCount.text = buildString {
+            append("${photos.size}장")
+            if (trashedCount > 0) append("  ·  🗑 $trashedCount")
+        }
+        if (photos.isEmpty()) showGridMessage("정리할 사진이 없어요 🎉") else gridEmpty.visibility = View.GONE
+        if (photos.isNotEmpty()) {
+            val pos = index.coerceIn(0, photos.size - 1)
+            if (pos < grid.firstVisiblePosition || pos > grid.lastVisiblePosition) grid.setSelection(pos)
+        }
+    }
+
+    private fun openViewer(pos: Int) {
+        if (pos !in photos.indices) return
+        index = pos
+        gridScreen.visibility = View.GONE
+        viewerScreen.visibility = View.VISIBLE
+        show()
+    }
+
+    @Deprecated("Activity API")
+    override fun onBackPressed() {
+        if (viewerScreen.visibility == View.VISIBLE) showGrid()
+        else @Suppress("DEPRECATION") super.onBackPressed()
+    }
+
+    private inner class GridAdapter : BaseAdapter() {
+        override fun getCount() = photos.size
+        override fun getItem(position: Int) = photos[position]
+        override fun getItemId(position: Int) = photos[position].id
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val iv = (convertView as? SquareImageView) ?: SquareImageView(this@MainActivity).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(0xFF222222.toInt())
+            }
+            val p = photos[position]
+            iv.tag = p.id
+            val cached = thumbCache.get(p.id)
+            if (cached != null) {
+                iv.setImageBitmap(cached)
+            } else {
+                iv.setImageDrawable(null)
+                thumbIo.execute {
+                    // 스크롤로 이미 다른 사진에 재사용된 칸이면 건너뜀
+                    if (iv.tag != p.id) return@execute
+                    val bmp = try {
+                        contentResolver.loadThumbnail(p.uri, Size(THUMB, THUMB), null)
+                    } catch (e: Exception) {
+                        null
+                    } ?: return@execute
+                    thumbCache.put(p.id, bmp)
+                    main.post { if (iv.tag == p.id) iv.setImageBitmap(bmp) }
+                }
+            }
+            return iv
+        }
+    }
+
     private fun showEmpty(msg: String) {
         photoView.setImageDrawable(null)
         emptyText.text = msg
@@ -245,6 +347,7 @@ class MainActivity : Activity() {
     }
 
     private fun show() {
+        gridAdapter.notifyDataSetChanged()
         btnUndo.isEnabled = undoStack.isNotEmpty() && !busy
         btnUndo.alpha = if (btnUndo.isEnabled) 1f else 0.35f
 
@@ -393,6 +496,7 @@ class MainActivity : Activity() {
                         undoStack.addLast(p to pos)
                         if (undoStack.size > 50) undoStack.removeFirst()
                         trashedCount++
+                        thumbCache.remove(p.id)
                         // index 는 그대로 두면 자동으로 다음 사진을 가리킨다
                     }
                 }
@@ -439,6 +543,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val THUMB = 320
         private const val REQ_READ = 1
         private const val REQ_TRASH = 2
         private const val REQ_RESTORE = 3

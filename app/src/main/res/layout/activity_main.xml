@@ -67,6 +67,17 @@
             android:textColor="#FFFFFF"
             android:textSize="16sp" />
 
+        <Button
+            android:id="@+id/btnOpenTrash"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/btn_small"
+            android:paddingHorizontal="12dp"
+            android:text="🗑"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp" />
+
         <!-- 일반 모드: '선택' / 선택 모드: '전체' -->
         <Button
             android:id="@+id/btnSelect"
@@ -305,6 +316,134 @@
             android:text="남기기 ▶"
             android:textColor="#FFFFFF"
             android:textSize="20sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>
+
+<!-- ===================== 휴지통 화면 ===================== -->
+<LinearLayout
+    android:id="@+id/trashScreen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:clickable="true"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <Button
+            android:id="@+id/btnTrashBack"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/btn_small"
+            android:paddingHorizontal="12dp"
+            android:text="‹ 전체"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/trashTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="휴지통"
+                android:textColor="#FFFFFF"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/trashSub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="최근에 지운 순서 · 기한이 지나면 자동 영구 삭제"
+                android:textColor="#AAAAAA"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnTrashSelectAll"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/btn_small"
+            android:paddingHorizontal="14dp"
+            android:text="전체"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <GridView
+            android:id="@+id/trashGrid"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:horizontalSpacing="2dp"
+            android:numColumns="4"
+            android:stretchMode="columnWidth"
+            android:verticalSpacing="2dp" />
+
+        <TextView
+            android:id="@+id/trashEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="24dp"
+            android:text="휴지통이 비어 있어요"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:visibility="gone" />
+
+        <ProgressBar
+            android:id="@+id/trashLoading"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <Button
+            android:id="@+id/btnRestoreSelected"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_marginEnd="10dp"
+            android:layout_weight="1"
+            android:background="@drawable/btn_keep"
+            android:text="↶ 복원"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnDeleteForever"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:background="@drawable/btn_trash"
+            android:text="영구 삭제"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
             android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>

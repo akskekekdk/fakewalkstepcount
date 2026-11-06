@@ -39,6 +39,14 @@ class LaunchTest {
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.selBar).visibility)
         activity.findViewById<View>(R.id.btnSelCancel).performClick()
         assertEquals(View.GONE, activity.findViewById<View>(R.id.selBar).visibility)
+        // 휴지통 화면 열고 닫기
+        activity.findViewById<View>(R.id.btnOpenTrash).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.trashScreen).visibility)
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.gridScreen).visibility)
+        activity.findViewById<View>(R.id.btnTrashBack).performClick()
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.trashScreen).visibility)
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.gridScreen).visibility)
         controller.pause().stop().destroy()
     }
 }

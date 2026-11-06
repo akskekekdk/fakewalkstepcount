@@ -45,6 +45,8 @@ class MainActivity : Activity() {
         val name: String,
         val dateMillis: Long,
         val size: Long,
+        /** 휴지통에 있는 사진만: 자동 영구 삭제 시각 (ms) */
+        val expiresMillis: Long = 0,
     )
 
     private lateinit var photoView: ZoomImageView
@@ -80,6 +82,23 @@ class MainActivity : Activity() {
     private lateinit var strip: RecyclerView
     private lateinit var stripLayout: LinearLayoutManager
     private val stripAdapter = StripAdapter()
+
+    // 휴지통 화면
+    private lateinit var trashScreen: View
+    private lateinit var trashGrid: GridView
+    private lateinit var trashTitle: TextView
+    private lateinit var trashEmpty: TextView
+    private lateinit var trashLoading: ProgressBar
+    private lateinit var btnTrashSelectAll: Button
+    private lateinit var btnRestoreSelected: Button
+    private lateinit var btnDeleteForever: Button
+    private val trashed = mutableListOf<Photo>()
+    private val trashSelected = LinkedHashSet<Long>()
+    private val trashAdapter = TrashAdapter()
+    /** 휴지통 화면에서 진행 중인 복원/영구삭제 요청 (많으면 나눠서) */
+    private val binQueue = ArrayDeque<List<Photo>>()
+    private var binRequestCode = 0
+    private var binDone = 0
     private val thumbIo = Executors.newFixedThreadPool(3)
     private val thumbCache = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
         override fun sizeOf(key: Long, value: Bitmap) = value.allocationByteCount
@@ -155,6 +174,7 @@ class MainActivity : Activity() {
         btnSelCancel.setOnClickListener { setSelectionMode(false) }
         btnTrashSelected.setOnClickListener { trashSelected() }
         btnGridUndo.setOnClickListener { undo() }
+        setupTrashScreen()
         setupGridPinch()
 
         strip = findViewById(R.id.strip)
@@ -281,7 +301,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun queryPhotos(): List<Photo> {
+    /** trashedOnly = true 면 휴지통에 있는 사진만, 최근에 지운 순서로. */
+    private fun queryPhotos(trashedOnly: Boolean = false): List<Photo> {
         val result = ArrayList<Photo>()
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val projection = arrayOf(
@@ -290,9 +311,25 @@ class MainActivity : Activity() {
             MediaStore.Images.Media.DATE_TAKEN,
             MediaStore.Images.Media.DATE_ADDED,
             MediaStore.Images.Media.SIZE,
+            MediaStore.MediaColumns.DATE_EXPIRES,
         )
-        val sort = "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC"
-        contentResolver.query(collection, projection, null, null, sort)?.use { c ->
+        val sort = if (trashedOnly) {
+            // 휴지통 기한 = 지운 시각 + 30일 → 기한이 늦을수록 최근에 지운 것
+            "${MediaStore.MediaColumns.DATE_EXPIRES} DESC"
+        } else {
+            "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC"
+        }
+        val args = Bundle().apply {
+            putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sort)
+            if (trashedOnly) putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
+        }
+        val cursor = try {
+            contentResolver.query(collection, projection, args, null)
+        } catch (e: Exception) {
+            null
+        }
+        cursor?.use { c ->
+            val expCol = c.getColumnIndex(MediaStore.MediaColumns.DATE_EXPIRES)
             val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
             val takenCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
@@ -309,6 +346,7 @@ class MainActivity : Activity() {
                         name = c.getString(nameCol) ?: "",
                         dateMillis = date,
                         size = c.getLong(sizeCol),
+                        expiresMillis = if (expCol >= 0) c.getLong(expCol) * 1000 else 0,
                     )
                 )
             }
@@ -431,6 +469,7 @@ class MainActivity : Activity() {
     @Deprecated("Activity API")
     override fun onBackPressed() {
         if (viewerScreen.visibility == View.VISIBLE) showGrid()
+        else if (trashScreen.visibility == View.VISIBLE) closeTrashScreen()
         else if (selectionMode) setSelectionMode(false)
         else @Suppress("DEPRECATION") super.onBackPressed()
     }
@@ -444,6 +483,7 @@ class MainActivity : Activity() {
             val cell = (convertView as? GridCell) ?: GridCell(this@MainActivity)
             val p = photos[position]
             cell.setSelectionState(selectionMode, p.id in selected)
+            cell.setLabel(null)
             loadThumb(cell.image, p)
             return cell
         }
@@ -467,6 +507,195 @@ class MainActivity : Activity() {
             } ?: return@execute
             thumbCache.put(p.id, bmp)
             main.post { if (iv.tag == p.id) iv.setImageBitmap(bmp) }
+        }
+    }
+
+    // ---------------------------------------------------------------- 휴지통 화면
+
+    private fun setupTrashScreen() {
+        trashScreen = findViewById(R.id.trashScreen)
+        trashGrid = findViewById(R.id.trashGrid)
+        trashTitle = findViewById(R.id.trashTitle)
+        trashEmpty = findViewById(R.id.trashEmpty)
+        trashLoading = findViewById(R.id.trashLoading)
+        btnTrashSelectAll = findViewById(R.id.btnTrashSelectAll)
+        btnRestoreSelected = findViewById(R.id.btnRestoreSelected)
+        btnDeleteForever = findViewById(R.id.btnDeleteForever)
+
+        trashGrid.adapter = trashAdapter
+        trashGrid.setOnItemClickListener { _, _, pos, _ ->
+            val id = trashed.getOrNull(pos)?.id ?: return@setOnItemClickListener
+            if (!trashSelected.remove(id)) trashSelected.add(id)
+            updateTrashHeader()
+        }
+        findViewById<View>(R.id.btnOpenTrash).setOnClickListener { openTrashScreen() }
+        findViewById<View>(R.id.btnTrashBack).setOnClickListener { closeTrashScreen() }
+        btnTrashSelectAll.setOnClickListener {
+            if (trashSelected.size == trashed.size) trashSelected.clear()
+            else trashed.forEach { trashSelected.add(it.id) }
+            updateTrashHeader()
+        }
+        btnRestoreSelected.setOnClickListener { restoreFromBin() }
+        btnDeleteForever.setOnClickListener { confirmDeleteForever() }
+    }
+
+    private fun openTrashScreen() {
+        if (selectionMode) setSelectionMode(false)
+        gridScreen.visibility = View.GONE
+        trashScreen.visibility = View.VISIBLE
+        trashGrid.numColumns = columns
+        loadTrash()
+    }
+
+    private fun closeTrashScreen() {
+        trashScreen.visibility = View.GONE
+        trashSelected.clear()
+        showGrid()
+    }
+
+    private fun loadTrash() {
+        trashLoading.visibility = View.VISIBLE
+        trashEmpty.visibility = View.GONE
+        io.execute {
+            val list = if (hasReadPermission()) queryPhotos(trashedOnly = true) else emptyList()
+            main.post {
+                trashed.clear()
+                trashed.addAll(list)
+                trashSelected.retainAll(list.map { it.id }.toSet())
+                trashLoading.visibility = View.GONE
+                updateTrashHeader()
+            }
+        }
+    }
+
+    private fun updateTrashHeader() {
+        trashAdapter.notifyDataSetChanged()
+        trashEmpty.visibility = if (trashed.isEmpty()) View.VISIBLE else View.GONE
+        trashTitle.text = when {
+            trashSelected.isNotEmpty() -> "${trashSelected.size}장 선택"
+            else -> "휴지통 ${trashed.size}장"
+        }
+        btnTrashSelectAll.text = if (trashed.isNotEmpty() && trashSelected.size == trashed.size) "전체 해제" else "전체"
+        btnTrashSelectAll.isEnabled = trashed.isNotEmpty()
+        val on = trashSelected.isNotEmpty() && !busy
+        btnRestoreSelected.isEnabled = on
+        btnDeleteForever.isEnabled = on
+        btnRestoreSelected.alpha = if (on) 1f else 0.4f
+        btnDeleteForever.alpha = if (on) 1f else 0.4f
+        btnRestoreSelected.text = if (trashSelected.isEmpty()) "↶ 복원" else "↶ ${trashSelected.size}장 복원"
+        btnDeleteForever.text = if (trashSelected.isEmpty()) "영구 삭제" else "${trashSelected.size}장 영구 삭제"
+    }
+
+    /** 자동 영구 삭제까지 남은 날 */
+    private fun daysLeftLabel(p: Photo): String? {
+        if (p.expiresMillis <= 0) return null
+        val left = p.expiresMillis - System.currentTimeMillis()
+        if (left <= 0) return "곧 삭제"
+        val days = Math.ceil(left / 86_400_000.0).toInt()
+        return if (days <= 1) "1일 남음" else "${days}일 남음"
+    }
+
+    private fun selectedInBin(): List<Photo> = trashed.filter { it.id in trashSelected }
+
+    private fun restoreFromBin() {
+        val list = selectedInBin()
+        if (list.isEmpty() || busy) return
+        startBinRequests(REQ_BIN_RESTORE, list)
+    }
+
+    private fun confirmDeleteForever() {
+        val list = selectedInBin()
+        if (list.isEmpty() || busy) return
+        AlertDialog.Builder(this)
+            .setTitle("${list.size}장을 영구 삭제할까요?")
+            .setMessage("영구 삭제한 사진은 되돌릴 수 없어요.")
+            .setPositiveButton("영구 삭제") { _, _ -> startBinRequests(REQ_BIN_DELETE, list) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun startBinRequests(code: Int, list: List<Photo>) {
+        binQueue.clear()
+        list.chunked(TRASH_CHUNK).forEach { binQueue.addLast(it) }
+        binRequestCode = code
+        binDone = 0
+        busy = true
+        updateTrashHeader()
+        nextBinRequest()
+    }
+
+    private fun nextBinRequest() {
+        val chunk = binQueue.firstOrNull()
+        if (chunk == null) {
+            finishBinRequests()
+            return
+        }
+        try {
+            val uris = chunk.map { it.uri }
+            val pi = if (binRequestCode == REQ_BIN_RESTORE) {
+                MediaStore.createTrashRequest(contentResolver, uris, false)
+            } else {
+                MediaStore.createDeleteRequest(contentResolver, uris)
+            }
+            startIntentSenderForResult(pi.intentSender, binRequestCode, null, 0, 0, 0)
+        } catch (e: Exception) {
+            binQueue.clear()
+            Toast.makeText(this, "처리하지 못했어요: ${e.message}", Toast.LENGTH_SHORT).show()
+            finishBinRequests()
+        }
+    }
+
+    private fun onBinResult(ok: Boolean) {
+        val chunk = binQueue.removeFirstOrNull()
+        if (ok && chunk != null) {
+            binDone += chunk.size
+            nextBinRequest()
+        } else {
+            binQueue.clear()
+            finishBinRequests()
+        }
+    }
+
+    private fun finishBinRequests() {
+        busy = false
+        if (binDone > 0) {
+            val msg = if (binRequestCode == REQ_BIN_RESTORE) "${binDone}장 복원했어요" else "${binDone}장 영구 삭제했어요"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            // 휴지통 밖에서 바뀐 것이므로 '되돌리기' 기록은 더 이상 맞지 않음
+            undoStack.clear()
+            trashSelected.clear()
+            if (binRequestCode == REQ_BIN_RESTORE) reloadPhotosKeepingState()
+        }
+        binDone = 0
+        loadTrash()
+    }
+
+    /** 복원된 사진이 전체 보기에 다시 보이도록 목록 새로 고침. */
+    private fun reloadPhotosKeepingState() {
+        io.execute {
+            val list = queryPhotos()
+            main.post {
+                val currentId = photos.getOrNull(index)?.id
+                photos.clear()
+                photos.addAll(list)
+                index = photos.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+                gridAdapter.notifyDataSetChanged()
+            }
+        }
+    }
+
+    private inner class TrashAdapter : BaseAdapter() {
+        override fun getCount() = trashed.size
+        override fun getItem(position: Int) = trashed[position]
+        override fun getItemId(position: Int) = trashed[position].id
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val cell = (convertView as? GridCell) ?: GridCell(this@MainActivity)
+            val p = trashed[position]
+            cell.setSelectionState(true, p.id in trashSelected)
+            cell.setLabel(daysLeftLabel(p))
+            loadThumb(cell.image, p)
+            return cell
         }
     }
 
@@ -737,6 +966,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
+            REQ_BIN_RESTORE, REQ_BIN_DELETE -> onBinResult(resultCode == RESULT_OK)
             REQ_TRASH -> {
                 val chunk = pendingTrash ?: return
                 pendingTrash = null
@@ -797,6 +1027,8 @@ class MainActivity : Activity() {
         private const val REQ_READ = 1
         private const val REQ_TRASH = 2
         private const val REQ_RESTORE = 3
+        private const val REQ_BIN_RESTORE = 4
+        private const val REQ_BIN_DELETE = 5
         private val DATE_FMT = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA)
     }
 }

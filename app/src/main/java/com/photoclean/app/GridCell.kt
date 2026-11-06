@@ -32,6 +32,20 @@ class GridCell(context: Context) : FrameLayout(context) {
         visibility = GONE
     }
 
+    /** 아래쪽 작은 글씨 (휴지통: "n일 남음") */
+    private val label = TextView(context).apply {
+        textSize = 11f
+        setTextColor(Color.WHITE)
+        setBackgroundColor(0x99000000.toInt())
+        gravity = Gravity.CENTER
+        visibility = GONE
+    }
+
+    fun setLabel(text: String?) {
+        label.text = text ?: ""
+        label.visibility = if (text == null) GONE else VISIBLE
+    }
+
     init {
         addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(dim, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -40,6 +54,8 @@ class GridCell(context: Context) : FrameLayout(context) {
             val mgn = (6 * dp).toInt()
             setMargins(mgn, mgn, mgn, mgn)
         })
+        label.setPadding(0, (2 * dp).toInt(), 0, (2 * dp).toInt())
+        addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
     }
 
     /** selectionMode 가 아니면 체크 표시를 숨긴다. */

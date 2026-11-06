@@ -24,6 +24,18 @@ class ZoomImageView @JvmOverloads constructor(
     /** dx, dy: 밀어낸 거리(px). 확대 중이 아닐 때만 호출된다. */
     var onSwipe: ((dx: Float, dy: Float) -> Unit)? = null
 
+    /** 확대 상태가 바뀔 때 (true = 확대 중) */
+    var onZoomChanged: ((Boolean) -> Unit)? = null
+
+    /**
+     * 사용자가 마지막으로 맞춘 확대 상태: 배율(화면 맞춤 대비)과
+     * 화면 가운데에 보이던 지점(사진 안의 상대 위치 0~1).
+     * 다음 사진이 들어오면 같은 배율·같은 위치로 확대해서 보여준다.
+     */
+    private var keptFactor = 1f
+    private var keptCx = 0.5f
+    private var keptCy = 0.5f
+
     private val m = Matrix()
     private val values = FloatArray(9)
     private var baseScale = 1f
@@ -38,6 +50,7 @@ class ZoomImageView @JvmOverloads constructor(
                 m.postScale(f, f, d.focusX, d.focusY)
                 fixTranslation()
                 imageMatrix = m
+                remember()
                 return true
             }
         })
@@ -47,13 +60,14 @@ class ZoomImageView @JvmOverloads constructor(
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
             if (isZoomed) {
-                resetZoom()
+                fitToScreen()
             } else {
                 val f = DOUBLE_TAP_ZOOM
                 m.postScale(f, f, e.x, e.y)
                 fixTranslation()
                 imageMatrix = m
             }
+            remember()
             return true
         }
 
@@ -62,6 +76,7 @@ class ZoomImageView @JvmOverloads constructor(
             m.postTranslate(-dx, -dy)
             fixTranslation()
             imageMatrix = m
+            remember()
             return true
         }
 
@@ -106,19 +121,60 @@ class ZoomImageView @JvmOverloads constructor(
         resetZoom()
     }
 
-    /** 화면에 꽉 맞게(가운데 정렬) 되돌린다. */
-    fun resetZoom() {
+    /** 새 사진/크기 변경 시: 화면 맞춤 후, 기억해 둔 확대 상태가 있으면 그대로 적용. */
+    private fun resetZoom() {
+        if (!fitToScreen()) return
+        if (keptFactor > 1.02f) applyKept()
+    }
+
+    /** 기억한 배율로 확대하고, 기억한 지점이 화면 가운데 오도록 이동. */
+    private fun applyKept() {
         val d = drawable ?: return
+        val f = keptFactor
+        m.postScale(f, f, width / 2f, height / 2f)
+        val pt = floatArrayOf(keptCx * d.intrinsicWidth, keptCy * d.intrinsicHeight)
+        m.mapPoints(pt)
+        m.postTranslate(width / 2f - pt[0], height / 2f - pt[1])
+        fixTranslation()
+        imageMatrix = m
+    }
+
+    /** 지금 확대 상태를 기억 (다음 사진에 적용). */
+    private fun remember() {
+        val d = drawable ?: return
+        val wasZoomed = keptFactor > 1.02f
+        keptFactor = currentScale() / baseScale
+        val inv = Matrix()
+        if (m.invert(inv)) {
+            val pt = floatArrayOf(width / 2f, height / 2f)
+            inv.mapPoints(pt)
+            keptCx = (pt[0] / d.intrinsicWidth).coerceIn(0f, 1f)
+            keptCy = (pt[1] / d.intrinsicHeight).coerceIn(0f, 1f)
+        }
+        val nowZoomed = keptFactor > 1.02f
+        if (wasZoomed != nowZoomed) onZoomChanged?.invoke(nowZoomed)
+    }
+
+    /** 확대 유지를 끄고 화면 맞춤으로. */
+    fun clearZoom() {
+        fitToScreen()
+        remember()
+    }
+
+    /** 화면에 꽉 맞게(가운데 정렬). 사진이 없거나 크기를 모르면 false. */
+    private fun fitToScreen(): Boolean {
+        val d = drawable ?: return false
         val vw = width.toFloat()
         val vh = height.toFloat()
         val dw = d.intrinsicWidth.toFloat()
         val dh = d.intrinsicHeight.toFloat()
-        if (vw <= 0 || vh <= 0 || dw <= 0 || dh <= 0) return
+        if (vw <= 0 || vh <= 0 || dw <= 0 || dh <= 0) return false
         baseScale = minOf(vw / dw, vh / dh)
         m.reset()
         m.postScale(baseScale, baseScale)
         m.postTranslate((vw - dw * baseScale) / 2f, (vh - dh * baseScale) / 2f)
         imageMatrix = m
+        return true
     }
 
     private fun currentScale(): Float {

@@ -101,7 +101,10 @@ class MainActivity : Activity() {
 
     private val io = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
-    private val cache = LruCache<Long, Bitmap>(4)
+    /** 크게 보기용 사진 캐시 (확대해도 선명하도록 화면보다 크게 디코딩하므로 용량 기준) */
+    private val cache = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 4).toInt()) {
+        override fun sizeOf(key: Long, value: Bitmap) = value.allocationByteCount
+    }
     private var loadToken = 0
     private var loaded = false
     private var askedManageThisSession = false
@@ -595,11 +598,12 @@ class MainActivity : Activity() {
         io.execute { decode(p) }
     }
 
-    /** 화면 크기에 맞게 축소해서 디코딩 (EXIF 회전 자동 적용). */
+    /** 화면에 맞게 축소해서 디코딩 (EXIF 회전 자동 적용). */
     private fun decode(p: Photo): Bitmap? {
         cache.get(p.id)?.let { return it }
         return try {
-            val maxSide = resources.displayMetrics.let { maxOf(it.widthPixels, it.heightPixels) }
+            // 확대했을 때도 선명하게: 화면의 2배(최대 4096px)까지 디코딩
+            val maxSide = resources.displayMetrics.let { minOf(maxOf(it.widthPixels, it.heightPixels) * 2, 4096) }
             val src = ImageDecoder.createSource(contentResolver, p.uri)
             val bmp = ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
                 val w = info.size.width
@@ -765,6 +769,17 @@ class MainActivity : Activity() {
 
     /** 확대하지 않은 상태에서: ← 다음, → 이전, ↑ 휴지통 */
     private fun setupSwipe() {
+        val hint = findViewById<TextView>(R.id.hint)
+        val normalHint = hint.text
+        photoView.onZoomChanged = { zoomed ->
+            if (zoomed) {
+                hint.text = "🔍 확대 유지 중 — 다음 사진도 같은 부분이 확대돼요 · 더블탭: 해제"
+                hint.setTextColor(0xFFFFB300.toInt())
+            } else {
+                hint.text = normalHint
+                hint.setTextColor(0xFF777777.toInt())
+            }
+        }
         photoView.onSwipe = { dx, dy ->
             val min = 60 * resources.displayMetrics.density
             when {

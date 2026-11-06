@@ -476,7 +476,7 @@ class MainActivity : Activity() {
         RecyclerView.ViewHolder(frame)
 
     private inner class StripAdapter : RecyclerView.Adapter<StripHolder>() {
-        private val dp = resources.displayMetrics.density
+        private val dp by lazy { resources.displayMetrics.density }
 
         override fun getItemCount() = photos.size
 

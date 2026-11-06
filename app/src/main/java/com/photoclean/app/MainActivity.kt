@@ -21,8 +21,8 @@ import android.util.Size
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.GridView
-import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
@@ -45,7 +45,7 @@ class MainActivity : Activity() {
         val size: Long,
     )
 
-    private lateinit var photoView: ImageView
+    private lateinit var photoView: ZoomImageView
     private lateinit var counterText: TextView
     private lateinit var infoText: TextView
     private lateinit var emptyText: TextView
@@ -63,6 +63,17 @@ class MainActivity : Activity() {
     private lateinit var gridEmpty: TextView
     private lateinit var gridLoading: ProgressBar
     private lateinit var gridBanner: TextView
+    private lateinit var gridTitle: TextView
+    private lateinit var btnSelect: Button
+    private lateinit var btnSelCancel: Button
+    private lateinit var btnGridUndo: Button
+    private lateinit var selBar: View
+    private lateinit var btnTrashSelected: Button
+
+    /** 전체 보기 선택 모드 */
+    private var selectionMode = false
+    private val selected = LinkedHashSet<Long>()
+    private var columns = 4
     private val gridAdapter = GridAdapter()
     private val thumbIo = Executors.newFixedThreadPool(3)
     private val thumbCache = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
@@ -72,11 +83,14 @@ class MainActivity : Activity() {
     private val photos = mutableListOf<Photo>()
     private var index = 0
 
-    /** 되돌리기용: (휴지통으로 보낸 사진, 원래 위치) */
-    private val undoStack = ArrayDeque<Pair<Photo, Int>>()
+    /** 되돌리기용: 한 번에 지운 묶음 = [(사진, 원래 위치)] (위치 오름차순) */
+    private val undoStack = ArrayDeque<List<Pair<Photo, Int>>>()
 
-    private var pendingTrash: Photo? = null
-    private var pendingRestore: Pair<Photo, Int>? = null
+    /** 휴지통으로 보내는 중인 사진들 (많으면 나눠서 요청) */
+    private val trashQueue = ArrayDeque<List<Photo>>()
+    private val trashBatch = ArrayList<Pair<Photo, Int>>()
+    private var pendingTrash: List<Photo>? = null
+    private var pendingRestore: List<Pair<Photo, Int>>? = null
     private var busy = false
     private var trashedCount = 0
 
@@ -109,9 +123,31 @@ class MainActivity : Activity() {
         gridEmpty = findViewById(R.id.gridEmpty)
         gridLoading = findViewById(R.id.gridLoading)
         gridBanner = findViewById(R.id.gridBanner)
+        gridTitle = findViewById(R.id.gridTitle)
+        btnSelect = findViewById(R.id.btnSelect)
+        btnSelCancel = findViewById(R.id.btnSelCancel)
+        btnGridUndo = findViewById(R.id.btnGridUndo)
+        selBar = findViewById(R.id.selBar)
+        btnTrashSelected = findViewById(R.id.btnTrashSelected)
 
+        columns = getPreferences(MODE_PRIVATE).getInt("columns", 4)
+        grid.numColumns = columns
         grid.adapter = gridAdapter
-        grid.setOnItemClickListener { _, _, pos, _ -> openViewer(pos) }
+        grid.setOnItemClickListener { _, _, pos, _ ->
+            if (selectionMode) toggleSelect(pos) else openViewer(pos)
+        }
+        grid.setOnItemLongClickListener { _, _, pos, _ ->
+            if (!selectionMode) setSelectionMode(true)
+            toggleSelect(pos)
+            true
+        }
+        btnSelect.setOnClickListener {
+            if (!selectionMode) setSelectionMode(true) else toggleSelectAll()
+        }
+        btnSelCancel.setOnClickListener { setSelectionMode(false) }
+        btnTrashSelected.setOnClickListener { trashSelected() }
+        btnGridUndo.setOnClickListener { undo() }
+        setupGridPinch()
         btnBack.setOnClickListener { showGrid() }
         gridBanner.setOnClickListener { requestManageMedia() }
 
@@ -278,15 +314,95 @@ class MainActivity : Activity() {
     private fun showGrid() {
         viewerScreen.visibility = View.GONE
         gridScreen.visibility = View.VISIBLE
-        gridAdapter.notifyDataSetChanged()
-        gridCount.text = buildString {
-            append("${photos.size}장")
-            if (trashedCount > 0) append("  ·  🗑 $trashedCount")
-        }
+        updateGridHeader()
         if (photos.isEmpty()) showGridMessage("정리할 사진이 없어요 🎉") else gridEmpty.visibility = View.GONE
         if (photos.isNotEmpty()) {
             val pos = index.coerceIn(0, photos.size - 1)
             if (pos < grid.firstVisiblePosition || pos > grid.lastVisiblePosition) grid.setSelection(pos)
+        }
+    }
+
+    private fun updateGridHeader() {
+        gridAdapter.notifyDataSetChanged()
+        val undoOn = undoStack.isNotEmpty() && !busy
+        btnGridUndo.isEnabled = undoOn
+        btnGridUndo.visibility = if (undoStack.isNotEmpty() && !selectionMode) View.VISIBLE else View.GONE
+        if (selectionMode) {
+            gridTitle.text = "${selected.size}장 선택"
+            gridCount.text = "탭해서 고르기 · 길게 눌러도 선택"
+            btnSelect.text = if (selected.size == photos.size && photos.isNotEmpty()) "전체 해제" else "전체"
+            btnSelCancel.visibility = View.VISIBLE
+            selBar.visibility = View.VISIBLE
+            btnTrashSelected.text = if (selected.isEmpty()) "사진을 골라주세요" else "🗑 ${selected.size}장 휴지통으로"
+            btnTrashSelected.isEnabled = selected.isNotEmpty() && !busy
+            btnTrashSelected.alpha = if (btnTrashSelected.isEnabled) 1f else 0.4f
+        } else {
+            gridTitle.text = "사진 정리"
+            gridCount.text = buildString {
+                append("${photos.size}장")
+                if (trashedCount > 0) append("  ·  🗑 $trashedCount")
+                append("  ·  두 손가락으로 크기 조절")
+            }
+            btnSelect.text = "선택"
+            btnSelCancel.visibility = View.GONE
+            selBar.visibility = View.GONE
+        }
+    }
+
+    private fun setSelectionMode(on: Boolean) {
+        selectionMode = on
+        if (!on) selected.clear()
+        updateGridHeader()
+    }
+
+    private fun toggleSelect(pos: Int) {
+        val id = photos.getOrNull(pos)?.id ?: return
+        if (!selected.remove(id)) selected.add(id)
+        updateGridHeader()
+    }
+
+    private fun toggleSelectAll() {
+        if (selected.size == photos.size) selected.clear()
+        else photos.forEach { selected.add(it.id) }
+        updateGridHeader()
+    }
+
+    /** 전체 보기에서 두 손가락으로 벌리면 크게(칸 수 ↓), 오므리면 작게(칸 수 ↑). */
+    private fun setupGridPinch() {
+        var acc = 1f
+        val detector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(d: ScaleGestureDetector): Boolean { acc = 1f; return true }
+            override fun onScale(d: ScaleGestureDetector): Boolean {
+                acc *= d.scaleFactor
+                val next = when {
+                    acc > 1.25f -> columns - 1
+                    acc < 0.8f -> columns + 1
+                    else -> return true
+                }.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
+                acc = 1f
+                if (next != columns) {
+                    val first = grid.firstVisiblePosition
+                    columns = next
+                    grid.numColumns = columns
+                    grid.setSelection(first)
+                    getPreferences(MODE_PRIVATE).edit().putInt("columns", columns).apply()
+                }
+                return true
+            }
+        })
+        var pinching = false
+        grid.setOnTouchListener { _, ev ->
+            detector.onTouchEvent(ev)
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN) pinching = false
+            if (!pinching && ev.pointerCount > 1) {
+                // 두 손가락이 닿는 순간 그리드의 스크롤/탭 처리를 취소
+                pinching = true
+                val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+                grid.onTouchEvent(cancel)
+                cancel.recycle()
+            }
+            // 핀치 중엔 손을 뗄 때까지 이벤트를 그리드에 넘기지 않음 (사진이 눌리지 않게)
+            pinching
         }
     }
 
@@ -301,6 +417,7 @@ class MainActivity : Activity() {
     @Deprecated("Activity API")
     override fun onBackPressed() {
         if (viewerScreen.visibility == View.VISIBLE) showGrid()
+        else if (selectionMode) setSelectionMode(false)
         else @Suppress("DEPRECATION") super.onBackPressed()
     }
 
@@ -310,11 +427,10 @@ class MainActivity : Activity() {
         override fun getItemId(position: Int) = photos[position].id
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val iv = (convertView as? SquareImageView) ?: SquareImageView(this@MainActivity).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF222222.toInt())
-            }
+            val cell = (convertView as? GridCell) ?: GridCell(this@MainActivity)
+            val iv = cell.image
             val p = photos[position]
+            cell.setSelectionState(selectionMode, p.id in selected)
             iv.tag = p.id
             val cached = thumbCache.get(p.id)
             if (cached != null) {
@@ -333,7 +449,7 @@ class MainActivity : Activity() {
                     main.post { if (iv.tag == p.id) iv.setImageBitmap(bmp) }
                 }
             }
-            return iv
+            return cell
         }
     }
 
@@ -443,27 +559,86 @@ class MainActivity : Activity() {
 
     private fun trashCurrent() {
         if (photos.isEmpty() || busy) return
-        if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) {
-            showManageMediaDialog { doTrash() }
-            return
-        }
-        doTrash()
+        requestTrash(listOf(photos[index]))
     }
 
-    private fun doTrash() {
-        if (photos.isEmpty() || busy) return
-        val p = photos[index]
-        pendingTrash = p
+    private fun trashSelected() {
+        if (busy || selected.isEmpty()) return
+        val list = photos.filter { it.id in selected }
+        if (list.isEmpty()) return
+        requestTrash(list)
+    }
+
+    /** 미디어 관리 권한이 없으면 먼저 안내한 뒤 휴지통 요청. */
+    private fun requestTrash(list: List<Photo>) {
+        if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) {
+            showManageMediaDialog { startTrash(list) }
+            return
+        }
+        startTrash(list)
+    }
+
+    private fun startTrash(list: List<Photo>) {
+        if (busy) return
+        trashQueue.clear()
+        trashBatch.clear()
+        list.chunked(TRASH_CHUNK).forEach { trashQueue.addLast(it) }
         busy = true
+        nextTrashChunk()
+    }
+
+    private fun nextTrashChunk() {
+        val chunk = trashQueue.removeFirstOrNull()
+        if (chunk == null) {
+            finishTrash()
+            return
+        }
+        pendingTrash = chunk
         try {
-            val pi = MediaStore.createTrashRequest(contentResolver, listOf(p.uri), true)
+            val pi = MediaStore.createTrashRequest(contentResolver, chunk.map { it.uri }, true)
             // '미디어 관리' 권한이 있으면 확인창 없이 바로 RESULT_OK 로 돌아온다.
             startIntentSenderForResult(pi.intentSender, REQ_TRASH, null, 0, 0, 0)
         } catch (e: Exception) {
-            busy = false
             pendingTrash = null
+            trashQueue.clear()
             Toast.makeText(this, "휴지통으로 보내지 못했어요: ${e.message}", Toast.LENGTH_SHORT).show()
+            finishTrash()
         }
+    }
+
+    /** 실제로 휴지통에 간 사진들을 목록에서 빼고 되돌리기 묶음으로 저장. */
+    private fun finishTrash() {
+        busy = false
+        if (trashBatch.isNotEmpty()) {
+            // 원래 위치를 기록하고 뒤에서부터 지워야 위치가 안 꼬인다
+            val withPos = trashBatch.map { (p, _) -> p to photos.indexOfFirst { it.id == p.id } }
+                .filter { it.second >= 0 }
+                .sortedBy { it.second }
+            withPos.asReversed().forEach { (p, pos) ->
+                photos.removeAt(pos)
+                selected.remove(p.id)
+                thumbCache.remove(p.id)
+                cache.remove(p.id)
+            }
+            if (withPos.isNotEmpty()) {
+                undoStack.addLast(withPos)
+                if (undoStack.size > 50) undoStack.removeFirst()
+                trashedCount += withPos.size
+                if (withPos.size > 1) {
+                    Toast.makeText(this, "${withPos.size}장을 휴지통으로 보냈어요", Toast.LENGTH_SHORT).show()
+                }
+            }
+            trashBatch.clear()
+        }
+        if (selectionMode && gridScreen.visibility == View.VISIBLE) {
+            setSelectionMode(false)
+        }
+        refresh()
+    }
+
+    /** 지금 보이는 화면을 다시 그린다. */
+    private fun refresh() {
+        if (viewerScreen.visibility == View.VISIBLE) show() else showGrid()
     }
 
     private fun undo() {
@@ -472,7 +647,7 @@ class MainActivity : Activity() {
         pendingRestore = last
         busy = true
         try {
-            val pi = MediaStore.createTrashRequest(contentResolver, listOf(last.first.uri), false)
+            val pi = MediaStore.createTrashRequest(contentResolver, last.map { it.first.uri }, false)
             startIntentSenderForResult(pi.intentSender, REQ_RESTORE, null, 0, 0, 0)
         } catch (e: Exception) {
             busy = false
@@ -484,66 +659,53 @@ class MainActivity : Activity() {
     @Deprecated("Activity API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        busy = false
         when (requestCode) {
             REQ_TRASH -> {
-                val p = pendingTrash ?: return
+                val chunk = pendingTrash ?: return
                 pendingTrash = null
                 if (resultCode == RESULT_OK) {
-                    val pos = photos.indexOfFirst { it.id == p.id }
-                    if (pos >= 0) {
-                        photos.removeAt(pos)
-                        undoStack.addLast(p to pos)
-                        if (undoStack.size > 50) undoStack.removeFirst()
-                        trashedCount++
-                        thumbCache.remove(p.id)
-                        // index 는 그대로 두면 자동으로 다음 사진을 가리킨다
-                    }
+                    chunk.forEach { trashBatch.add(it to -1) }
+                    nextTrashChunk()
+                } else {
+                    trashQueue.clear() // 사용자가 취소하면 남은 것도 중단
+                    finishTrash()
                 }
-                show()
             }
             REQ_RESTORE -> {
-                val (p, pos) = pendingRestore ?: return
+                busy = false
+                val batch = pendingRestore ?: return
                 pendingRestore = null
                 if (resultCode == RESULT_OK) {
                     undoStack.removeLastOrNull()
-                    val at = pos.coerceIn(0, photos.size)
-                    photos.add(at, p)
-                    index = at
-                    trashedCount = (trashedCount - 1).coerceAtLeast(0)
-                    Toast.makeText(this, "복원했어요", Toast.LENGTH_SHORT).show()
+                    // 원래 위치 오름차순으로 다시 끼워 넣으면 제자리로 돌아간다
+                    batch.forEach { (p, pos) -> photos.add(pos.coerceIn(0, photos.size), p) }
+                    index = batch.first().second.coerceIn(0, photos.size - 1)
+                    trashedCount = (trashedCount - batch.size).coerceAtLeast(0)
+                    Toast.makeText(this, "${batch.size}장 복원했어요", Toast.LENGTH_SHORT).show()
                 }
-                show()
+                refresh()
             }
         }
     }
 
     // ---------------------------------------------------------------- 스와이프
 
+    /** 확대하지 않은 상태에서: ← 다음, → 이전, ↑ 휴지통 */
     private fun setupSwipe() {
-        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent) = true
-            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-                val start = e1 ?: return false
-                val dx = e2.x - start.x
-                val dy = e2.y - start.y
-                val min = 120 * resources.displayMetrics.density / 2
-                return when {
-                    abs(dx) > abs(dy) && abs(dx) > min -> { move(if (dx < 0) +1 else -1); true }
-                    dy < -min && abs(dy) > abs(dx) -> { trashCurrent(); true }
-                    else -> false
-                }
+        photoView.onSwipe = { dx, dy ->
+            val min = 60 * resources.displayMetrics.density
+            when {
+                abs(dx) > abs(dy) && abs(dx) > min -> move(if (dx < 0) +1 else -1)
+                dy < -min && abs(dy) > abs(dx) -> trashCurrent()
             }
-        })
-        photoView.setOnTouchListener { v, ev ->
-            val handled = detector.onTouchEvent(ev)
-            if (ev.action == MotionEvent.ACTION_UP) v.performClick()
-            handled
         }
     }
 
     companion object {
         private const val THUMB = 320
+        private const val MIN_COLUMNS = 2
+        private const val MAX_COLUMNS = 8
+        private const val TRASH_CHUNK = 500
         private const val REQ_READ = 1
         private const val REQ_TRASH = 2
         private const val REQ_RESTORE = 3

@@ -29,6 +29,8 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -75,6 +77,9 @@ class MainActivity : Activity() {
     private val selected = LinkedHashSet<Long>()
     private var columns = 4
     private val gridAdapter = GridAdapter()
+    private lateinit var strip: RecyclerView
+    private lateinit var stripLayout: LinearLayoutManager
+    private val stripAdapter = StripAdapter()
     private val thumbIo = Executors.newFixedThreadPool(3)
     private val thumbCache = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
         override fun sizeOf(key: Long, value: Bitmap) = value.allocationByteCount
@@ -148,6 +153,12 @@ class MainActivity : Activity() {
         btnTrashSelected.setOnClickListener { trashSelected() }
         btnGridUndo.setOnClickListener { undo() }
         setupGridPinch()
+
+        strip = findViewById(R.id.strip)
+        stripLayout = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        strip.layoutManager = stripLayout
+        strip.adapter = stripAdapter
+        strip.itemAnimator = null
         btnBack.setOnClickListener { showGrid() }
         gridBanner.setOnClickListener { requestManageMedia() }
 
@@ -428,28 +439,88 @@ class MainActivity : Activity() {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val cell = (convertView as? GridCell) ?: GridCell(this@MainActivity)
-            val iv = cell.image
             val p = photos[position]
             cell.setSelectionState(selectionMode, p.id in selected)
-            iv.tag = p.id
-            val cached = thumbCache.get(p.id)
-            if (cached != null) {
-                iv.setImageBitmap(cached)
-            } else {
-                iv.setImageDrawable(null)
-                thumbIo.execute {
-                    // 스크롤로 이미 다른 사진에 재사용된 칸이면 건너뜀
-                    if (iv.tag != p.id) return@execute
-                    val bmp = try {
-                        contentResolver.loadThumbnail(p.uri, Size(THUMB, THUMB), null)
-                    } catch (e: Exception) {
-                        null
-                    } ?: return@execute
-                    thumbCache.put(p.id, bmp)
-                    main.post { if (iv.tag == p.id) iv.setImageBitmap(bmp) }
+            loadThumb(cell.image, p)
+            return cell
+        }
+    }
+
+    /** 썸네일을 비동기로 불러와 iv 에 넣는다 (스크롤로 재사용된 칸이면 버림). */
+    private fun loadThumb(iv: ImageView, p: Photo) {
+        iv.tag = p.id
+        val cached = thumbCache.get(p.id)
+        if (cached != null) {
+            iv.setImageBitmap(cached)
+            return
+        }
+        iv.setImageDrawable(null)
+        thumbIo.execute {
+            if (iv.tag != p.id) return@execute
+            val bmp = try {
+                contentResolver.loadThumbnail(p.uri, Size(THUMB, THUMB), null)
+            } catch (e: Exception) {
+                null
+            } ?: return@execute
+            thumbCache.put(p.id, bmp)
+            main.post { if (iv.tag == p.id) iv.setImageBitmap(bmp) }
+        }
+    }
+
+    // ---------------------------------------------------------------- 썸네일 줄 (한 장 보기 화면)
+
+    private class StripHolder(val frame: android.widget.FrameLayout, val image: ImageView) :
+        RecyclerView.ViewHolder(frame)
+
+    private inner class StripAdapter : RecyclerView.Adapter<StripHolder>() {
+        private val dp = resources.displayMetrics.density
+
+        override fun getItemCount() = photos.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StripHolder {
+            val size = (56 * dp).toInt()
+            val frame = android.widget.FrameLayout(this@MainActivity).apply {
+                layoutParams = RecyclerView.LayoutParams(size, size).apply {
+                    val m = (2 * dp).toInt()
+                    setMargins(m, 0, m, 0)
+                }
+                setPadding((3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt())
+            }
+            val iv = ImageView(this@MainActivity).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(0xFF222222.toInt())
+            }
+            frame.addView(iv, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            val h = StripHolder(frame, iv)
+            frame.setOnClickListener {
+                val pos = h.bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION && !busy) {
+                    index = pos
+                    show()
                 }
             }
-            return cell
+            return h
+        }
+
+        override fun onBindViewHolder(h: StripHolder, position: Int) {
+            val p = photos[position]
+            val current = position == index
+            // 지금 보는 사진은 빨간 테두리
+            h.frame.setBackgroundColor(if (current) 0xFFE53935.toInt() else 0x00000000)
+            h.image.alpha = if (current) 1f else 0.6f
+            loadThumb(h.image, p)
+        }
+    }
+
+    /** 지금 사진이 썸네일 줄 가운데 오도록 스크롤. */
+    private fun centerStrip() {
+        stripAdapter.notifyDataSetChanged()
+        if (photos.isEmpty()) return
+        strip.post {
+            val item = (60 * resources.displayMetrics.density).toInt()
+            stripLayout.scrollToPositionWithOffset(index, (strip.width - item) / 2)
         }
     }
 
@@ -469,6 +540,7 @@ class MainActivity : Activity() {
 
         if (photos.isEmpty()) {
             showEmpty("정리할 사진이 없어요 🎉")
+            stripAdapter.notifyDataSetChanged()
             return
         }
         index = index.coerceIn(0, photos.size - 1)
@@ -485,6 +557,7 @@ class MainActivity : Activity() {
         infoText.text = "${DATE_FMT.format(Date(p.dateMillis))}  ·  ${Formatter.formatShortFileSize(this, p.size)}"
 
         displayImage(p)
+        centerStrip()
         // 다음 사진 미리 불러오기
         photos.getOrNull(index + 1)?.let { prefetch(it) }
     }

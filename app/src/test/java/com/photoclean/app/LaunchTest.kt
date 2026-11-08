@@ -39,6 +39,23 @@ class LaunchTest {
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.selBar).visibility)
         activity.findViewById<View>(R.id.btnSelCancel).performClick()
         assertEquals(View.GONE, activity.findViewById<View>(R.id.selBar).visibility)
+        // 즐겨찾기 탭 ↔ 전체 탭
+        activity.findViewById<View>(R.id.tabFav).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals("♥ 즐겨찾기", activity.findViewById<android.widget.TextView>(R.id.gridTitle).text.toString())
+        activity.findViewById<View>(R.id.tabAll).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals("사진 정리", activity.findViewById<android.widget.TextView>(R.id.gridTitle).text.toString())
+        // 설정: 확대 유지 기본값 켜짐, 끄면 저장됨
+        activity.findViewById<View>(R.id.btnSettings).performClick()
+        val dlg = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+        org.junit.Assert.assertTrue(dlg.isShowing)
+        // Robolectric 은 목록을 그리지 않아 체크 상태가 화면에 반영되지 않으므로, 실제 화면처럼 '켜짐'으로 맞춘 뒤 탭
+        dlg.listView.setItemChecked(0, true)
+        dlg.listView.performItemClick(dlg.listView, 0, 0)
+        dlg.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertFalse(activity.getSharedPreferences("settings", 0).getBoolean("keep_zoom", true))
         // 휴지통 화면 열고 닫기
         activity.findViewById<View>(R.id.btnOpenTrash).performClick()
         org.robolectric.shadows.ShadowLooper.idleMainLooper()

@@ -41,6 +41,19 @@ class GridCell(context: Context) : FrameLayout(context) {
         visibility = GONE
     }
 
+    /** 왼쪽 위 작은 하트 (즐겨찾기) */
+    private val heart = TextView(context).apply {
+        text = "♥"
+        textSize = 14f
+        setTextColor(0xFFFF5370.toInt())
+        setShadowLayer(3f, 0f, 0f, Color.BLACK)
+        visibility = GONE
+    }
+
+    fun setFavorite(fav: Boolean) {
+        heart.visibility = if (fav) VISIBLE else GONE
+    }
+
     fun setLabel(text: String?) {
         label.text = text ?: ""
         label.visibility = if (text == null) GONE else VISIBLE
@@ -53,6 +66,10 @@ class GridCell(context: Context) : FrameLayout(context) {
         addView(check, LayoutParams(size, size, Gravity.TOP or Gravity.END).apply {
             val mgn = (6 * dp).toInt()
             setMargins(mgn, mgn, mgn, mgn)
+        })
+        addView(heart, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+            val mgn = (5 * dp).toInt()
+            setMargins(mgn, mgn / 2, mgn, mgn)
         })
         label.setPadding(0, (2 * dp).toInt(), 0, (2 * dp).toInt())
         addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))

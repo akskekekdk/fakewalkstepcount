@@ -47,6 +47,8 @@ class MainActivity : Activity() {
         val size: Long,
         /** 휴지통에 있는 사진만: 자동 영구 삭제 시각 (ms) */
         val expiresMillis: Long = 0,
+        /** 즐겨찾기(하트) 여부 — 안드로이드 표준 즐겨찾기 값 */
+        val favorite: Boolean = false,
     )
 
     private lateinit var photoView: ZoomImageView
@@ -82,6 +84,14 @@ class MainActivity : Activity() {
     private lateinit var strip: RecyclerView
     private lateinit var stripLayout: LinearLayoutManager
     private val stripAdapter = StripAdapter()
+
+    /** true 면 즐겨찾기 사진만 보기 */
+    private var favOnly = false
+    private lateinit var tabAll: Button
+    private lateinit var tabFav: Button
+    private lateinit var btnFav: Button
+    private var pendingFav: Pair<Photo, Boolean>? = null
+    private val prefs by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
 
     // 휴지통 화면
     private lateinit var trashScreen: View
@@ -175,6 +185,16 @@ class MainActivity : Activity() {
         btnTrashSelected.setOnClickListener { trashSelected() }
         btnGridUndo.setOnClickListener { undo() }
         setupTrashScreen()
+
+        tabAll = findViewById(R.id.tabAll)
+        tabFav = findViewById(R.id.tabFav)
+        btnFav = findViewById(R.id.btnFav)
+        tabAll.setOnClickListener { setFavOnly(false) }
+        tabFav.setOnClickListener { setFavOnly(true) }
+        btnFav.setOnClickListener { toggleFavorite() }
+        findViewById<View>(R.id.btnSettings).setOnClickListener { showSettings() }
+        photoView.keepZoomAcrossPhotos = prefs.getBoolean(PREF_KEEP_ZOOM, true)
+        updateTabs()
         setupGridPinch()
 
         strip = findViewById(R.id.strip)
@@ -289,9 +309,11 @@ class MainActivity : Activity() {
         emptyText.setOnClickListener(null)
         gridEmpty.setOnClickListener(null)
         gridLoading.visibility = View.VISIBLE
+        val favFilter = favOnly
         io.execute {
-            val list = queryPhotos()
+            val list = queryPhotos(favoritesOnly = favFilter)
             main.post {
+                if (favFilter != favOnly) return@post // 그 사이 탭이 바뀜
                 photos.clear()
                 photos.addAll(list)
                 index = 0
@@ -302,7 +324,7 @@ class MainActivity : Activity() {
     }
 
     /** trashedOnly = true 면 휴지통에 있는 사진만, 최근에 지운 순서로. */
-    private fun queryPhotos(trashedOnly: Boolean = false): List<Photo> {
+    private fun queryPhotos(trashedOnly: Boolean = false, favoritesOnly: Boolean = false): List<Photo> {
         val result = ArrayList<Photo>()
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val projection = arrayOf(
@@ -312,6 +334,7 @@ class MainActivity : Activity() {
             MediaStore.Images.Media.DATE_ADDED,
             MediaStore.Images.Media.SIZE,
             MediaStore.MediaColumns.DATE_EXPIRES,
+            MediaStore.MediaColumns.IS_FAVORITE,
         )
         val sort = if (trashedOnly) {
             // 휴지통 기한 = 지운 시각 + 30일 → 기한이 늦을수록 최근에 지운 것
@@ -322,6 +345,9 @@ class MainActivity : Activity() {
         val args = Bundle().apply {
             putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sort)
             if (trashedOnly) putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
+            if (favoritesOnly) {
+                putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, "${MediaStore.MediaColumns.IS_FAVORITE} = 1")
+            }
         }
         val cursor = try {
             contentResolver.query(collection, projection, args, null)
@@ -330,6 +356,7 @@ class MainActivity : Activity() {
         }
         cursor?.use { c ->
             val expCol = c.getColumnIndex(MediaStore.MediaColumns.DATE_EXPIRES)
+            val favCol = c.getColumnIndex(MediaStore.MediaColumns.IS_FAVORITE)
             val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
             val takenCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
@@ -347,6 +374,7 @@ class MainActivity : Activity() {
                         dateMillis = date,
                         size = c.getLong(sizeCol),
                         expiresMillis = if (expCol >= 0) c.getLong(expCol) * 1000 else 0,
+                        favorite = favCol >= 0 && c.getInt(favCol) == 1,
                     )
                 )
             }
@@ -367,7 +395,12 @@ class MainActivity : Activity() {
         viewerScreen.visibility = View.GONE
         gridScreen.visibility = View.VISIBLE
         updateGridHeader()
-        if (photos.isEmpty()) showGridMessage("정리할 사진이 없어요 🎉") else gridEmpty.visibility = View.GONE
+        if (photos.isEmpty()) {
+            showGridMessage(
+                if (favOnly) "즐겨찾기한 사진이 없어요\n\n사진을 크게 연 뒤 위쪽 ♡ 를 누르면\n즐겨찾기에 추가돼요"
+                else "정리할 사진이 없어요 🎉"
+            )
+        } else gridEmpty.visibility = View.GONE
         if (photos.isNotEmpty()) {
             val pos = index.coerceIn(0, photos.size - 1)
             if (pos < grid.firstVisiblePosition || pos > grid.lastVisiblePosition) grid.setSelection(pos)
@@ -389,7 +422,7 @@ class MainActivity : Activity() {
             btnTrashSelected.isEnabled = selected.isNotEmpty() && !busy
             btnTrashSelected.alpha = if (btnTrashSelected.isEnabled) 1f else 0.4f
         } else {
-            gridTitle.text = "사진 정리"
+            gridTitle.text = if (favOnly) "♥ 즐겨찾기" else "사진 정리"
             gridCount.text = buildString {
                 append("${photos.size}장")
                 if (trashedCount > 0) append("  ·  🗑 $trashedCount")
@@ -484,6 +517,7 @@ class MainActivity : Activity() {
             val p = photos[position]
             cell.setSelectionState(selectionMode, p.id in selected)
             cell.setLabel(null)
+            cell.setFavorite(p.favorite)
             loadThumb(cell.image, p)
             return cell
         }
@@ -508,6 +542,82 @@ class MainActivity : Activity() {
             thumbCache.put(p.id, bmp)
             main.post { if (iv.tag == p.id) iv.setImageBitmap(bmp) }
         }
+    }
+
+    // ---------------------------------------------------------------- 즐겨찾기
+
+    private fun updateTabs() {
+        tabAll.alpha = if (favOnly) 0.45f else 1f
+        tabFav.alpha = if (favOnly) 1f else 0.45f
+        tabAll.setTypeface(null, if (favOnly) android.graphics.Typeface.NORMAL else android.graphics.Typeface.BOLD)
+        tabFav.setTypeface(null, if (favOnly) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+    }
+
+    /** 전체 ↔ 즐겨찾기만 보기 전환 */
+    private fun setFavOnly(on: Boolean) {
+        if (favOnly == on || busy) return
+        if (selectionMode) setSelectionMode(false)
+        favOnly = on
+        // 목록이 바뀌므로 '되돌리기' 위치 기록은 맞지 않음 (지운 사진은 휴지통 화면에서 복원 가능)
+        undoStack.clear()
+        updateTabs()
+        // 새 목록이 올 때까지 이전 목록이 보이지 않게 비우고 제목은 바로 바꾼다
+        photos.clear()
+        index = 0
+        updateGridHeader()
+        if (hasReadPermission()) loadPhotos()
+    }
+
+    /** 지금 보는 사진의 하트 켜기/끄기 */
+    private fun toggleFavorite() {
+        if (photos.isEmpty() || busy) return
+        val p = photos[index]
+        val value = !p.favorite
+        pendingFav = p to value
+        busy = true
+        try {
+            // '미디어 관리' 권한이 있으면 확인창 없이 바로 처리된다
+            val pi = MediaStore.createFavoriteRequest(contentResolver, listOf(p.uri), value)
+            startIntentSenderForResult(pi.intentSender, REQ_FAVORITE, null, 0, 0, 0)
+        } catch (e: Exception) {
+            busy = false
+            pendingFav = null
+            Toast.makeText(this, "즐겨찾기를 바꾸지 못했어요: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun onFavoriteResult(ok: Boolean) {
+        busy = false
+        val (p, value) = pendingFav ?: return
+        pendingFav = null
+        if (ok) {
+            val pos = photos.indexOfFirst { it.id == p.id }
+            // 즐겨찾기 화면에서 하트를 꺼도 바로 사라지지 않게 목록에는 남겨둔다 (탭을 다시 누르면 정리됨)
+            if (pos >= 0) photos[pos] = photos[pos].copy(favorite = value)
+            Toast.makeText(this, if (value) "♥ 즐겨찾기에 추가했어요" else "즐겨찾기에서 뺐어요", Toast.LENGTH_SHORT).show()
+        }
+        refresh()
+    }
+
+    // ---------------------------------------------------------------- 설정
+
+    private fun showSettings() {
+        val labels = arrayOf("확대 유지: 다음 사진에서도 같은 부분을 확대해서 보기")
+        val checked = booleanArrayOf(photoView.keepZoomAcrossPhotos)
+        AlertDialog.Builder(this)
+            .setTitle("설정")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setPositiveButton("확인") { _, _ ->
+                photoView.keepZoomAcrossPhotos = checked[0]
+                prefs.edit().putBoolean(PREF_KEEP_ZOOM, checked[0]).apply()
+                Toast.makeText(
+                    this,
+                    if (checked[0]) "확대 유지를 켰어요" else "확대 유지를 껐어요",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     // ---------------------------------------------------------------- 휴지통 화면
@@ -672,9 +782,11 @@ class MainActivity : Activity() {
 
     /** 복원된 사진이 전체 보기에 다시 보이도록 목록 새로 고침. */
     private fun reloadPhotosKeepingState() {
+        val favFilter = favOnly
         io.execute {
-            val list = queryPhotos()
+            val list = queryPhotos(favoritesOnly = favFilter)
             main.post {
+                if (favFilter != favOnly) return@post
                 val currentId = photos.getOrNull(index)?.id
                 photos.clear()
                 photos.addAll(list)
@@ -694,6 +806,7 @@ class MainActivity : Activity() {
             val p = trashed[position]
             cell.setSelectionState(true, p.id in trashSelected)
             cell.setLabel(daysLeftLabel(p))
+            cell.setFavorite(false)
             loadThumb(cell.image, p)
             return cell
         }
@@ -788,6 +901,8 @@ class MainActivity : Activity() {
         }
         infoText.text = "${DATE_FMT.format(Date(p.dateMillis))}  ·  ${Formatter.formatShortFileSize(this, p.size)}"
 
+        btnFav.text = if (p.favorite) "♥" else "♡"
+        btnFav.setTextColor(if (p.favorite) 0xFFFF5370.toInt() else 0xFFFFFFFF.toInt())
         displayImage(p)
         centerStrip()
         // 다음 사진 미리 불러오기
@@ -967,6 +1082,7 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
             REQ_BIN_RESTORE, REQ_BIN_DELETE -> onBinResult(resultCode == RESULT_OK)
+            REQ_FAVORITE -> onFavoriteResult(resultCode == RESULT_OK)
             REQ_TRASH -> {
                 val chunk = pendingTrash ?: return
                 pendingTrash = null
@@ -1002,7 +1118,7 @@ class MainActivity : Activity() {
         val hint = findViewById<TextView>(R.id.hint)
         val normalHint = hint.text
         photoView.onZoomChanged = { zoomed ->
-            if (zoomed) {
+            if (zoomed && photoView.keepZoomAcrossPhotos) {
                 hint.text = "🔍 확대 유지 중 — 다음 사진도 같은 부분이 확대돼요 · 더블탭: 해제"
                 hint.setTextColor(0xFFFFB300.toInt())
             } else {
@@ -1029,6 +1145,8 @@ class MainActivity : Activity() {
         private const val REQ_RESTORE = 3
         private const val REQ_BIN_RESTORE = 4
         private const val REQ_BIN_DELETE = 5
+        private const val REQ_FAVORITE = 6
+        private const val PREF_KEEP_ZOOM = "keep_zoom"
         private val DATE_FMT = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA)
     }
 }

@@ -24,6 +24,9 @@ class ZoomImageView @JvmOverloads constructor(
     /** dx, dy: 밀어낸 거리(px). 확대 중이 아닐 때만 호출된다. */
     var onSwipe: ((dx: Float, dy: Float) -> Unit)? = null
 
+    /** 켜져 있으면 다음 사진에서도 같은 배율·같은 부분을 확대해서 보여준다 (설정). */
+    var keepZoomAcrossPhotos = true
+
     /** 확대 상태가 바뀔 때 (true = 확대 중) */
     var onZoomChanged: ((Boolean) -> Unit)? = null
 
@@ -124,7 +127,13 @@ class ZoomImageView @JvmOverloads constructor(
     /** 새 사진/크기 변경 시: 화면 맞춤 후, 기억해 둔 확대 상태가 있으면 그대로 적용. */
     private fun resetZoom() {
         if (!fitToScreen()) return
-        if (keptFactor > 1.02f) applyKept()
+        if (keepZoomAcrossPhotos) {
+            if (keptFactor > 1.02f) applyKept()
+        } else if (keptFactor > 1.02f) {
+            // 확대 유지 꺼짐: 새 사진은 항상 화면 맞춤으로
+            keptFactor = 1f
+            onZoomChanged?.invoke(false)
+        }
     }
 
     /** 기억한 배율로 확대하고, 기억한 지점이 화면 가운데 오도록 이동. */

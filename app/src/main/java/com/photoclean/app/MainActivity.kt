@@ -2,6 +2,7 @@ package com.photoclean.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
@@ -182,6 +183,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSwipeDown: TextView
     private lateinit var tvBlur: TextView
     private lateinit var tvManage: TextView
+    private lateinit var tvUpdate: TextView
+    private lateinit var swAutoUpdate: MaterialSwitch
+
+    // 업데이트
+    private var checkingUpdate = false
+    /** '출처를 알 수 없는 앱' 허용하러 갔다 오면 이어서 진행할 릴리즈 */
+    private var pendingRelease: Updater.Release? = null
 
     // ============================================================ 시작
 
@@ -213,12 +221,19 @@ class MainActivity : AppCompatActivity() {
         loadBlurCache()
         showScreen(Screen.GRID)
         if (hasReadPermission()) loadAll() else requestReadPermission()
+        maybeAutoCheckUpdate()
     }
 
     override fun onResume() {
         super.onResume()
         updateManageBanner()
         if (screen == Screen.SETTINGS) updateSettingsUi()
+        pendingRelease?.let { r ->
+            if (packageManager.canRequestPackageInstalls()) {
+                pendingRelease = null
+                startUpdate(r)
+            }
+        }
         if (!loaded && hasReadPermission()) loadAll()
         if (hasReadPermission() && !askedManage) {
             askedManage = true
@@ -1416,6 +1431,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.rowManage).setOnClickListener {
             if (Build.VERSION.SDK_INT >= 31) requestManageMedia()
         }
+        tvUpdate = findViewById(R.id.tvUpdate)
+        swAutoUpdate = findViewById(R.id.swAutoUpdate)
+        findViewById<TextView>(R.id.tvCurrentVersion).text = "현재 버전 ${BuildConfig.VERSION_NAME}"
+        findViewById<View>(R.id.rowUpdate).setOnClickListener { checkForUpdate(silent = false) }
+        findViewById<View>(R.id.rowAutoUpdate).setOnClickListener { swAutoUpdate.toggle() }
+        swAutoUpdate.setOnCheckedChangeListener { _, on -> settings.autoUpdate = on }
         findViewById<TextView>(R.id.tvVersion).text = try {
             "사진 정리 " + packageManager.getPackageInfo(packageName, 0).versionName
         } catch (e: Exception) {
@@ -1445,6 +1466,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateSettingsUi() {
         swKeepZoom.isChecked = settings.keepZoom
         swResume.isChecked = settings.resume
+        swAutoUpdate.isChecked = settings.autoUpdate
         tvSwipeSide.text = if (settings.swipeReverse) "← 이전" else "← 다음"
         tvSwipeUp.text = settings.swipeUp.short.ifEmpty { "사용 안 함" }
         tvSwipeDown.text = settings.swipeDown.short.ifEmpty { "사용 안 함" }
@@ -1453,6 +1475,151 @@ class MainActivity : AppCompatActivity() {
             Build.VERSION.SDK_INT < 31 -> "지원 안 함"
             canManageMedia() -> "켜짐"
             else -> "꺼짐 · 켜기"
+        }
+    }
+
+    // ============================================================ 업데이트
+
+    /** 앱 켤 때: 자동 확인이 켜져 있고 12시간이 지났으면 조용히 확인 */
+    private fun maybeAutoCheckUpdate() {
+        if (!settings.autoUpdate) return
+        if (System.currentTimeMillis() - settings.lastUpdateCheck < 12 * 60 * 60 * 1000L) return
+        checkForUpdate(silent = true)
+    }
+
+    /** silent = true 면 새 버전이 있을 때만 알림 */
+    private fun checkForUpdate(silent: Boolean) {
+        if (checkingUpdate) return
+        checkingUpdate = true
+        tvUpdate.text = "확인 중…"
+        io.execute {
+            val result = runCatching { Updater.fetchLatest() }
+            main.post {
+                checkingUpdate = false
+                if (isFinishing || isDestroyed) return@post
+                val r = result.getOrNull()
+                when {
+                    result.isFailure -> {
+                        tvUpdate.text = "확인하기"
+                        if (!silent) Toast.makeText(this, "새 버전을 확인하지 못했어요. 인터넷 연결을 확인해 주세요", Toast.LENGTH_SHORT).show()
+                    }
+                    r != null && Updater.compareVersions(r.version, BuildConfig.VERSION_NAME) > 0 -> {
+                        settings.lastUpdateCheck = System.currentTimeMillis()
+                        tvUpdate.text = "새 버전 ${r.version}"
+                        showUpdateDialog(r)
+                    }
+                    else -> {
+                        settings.lastUpdateCheck = System.currentTimeMillis()
+                        tvUpdate.text = "최신 버전"
+                        if (!silent) Toast.makeText(this, "최신 버전을 쓰고 있어요", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showUpdateDialog(r: Updater.Release) {
+        val notes = r.notes.lines().filter { it.isNotBlank() }.take(12).joinToString("\n")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("새 버전 ${r.version}")
+            .setMessage(buildString {
+                append("지금 버전: ${BuildConfig.VERSION_NAME}\n")
+                if (r.apkSize > 0) append("크기: ${Formatter.formatShortFileSize(this@MainActivity, r.apkSize)}\n")
+                if (notes.isNotEmpty()) append("\n").append(notes)
+            })
+            .setPositiveButton("업데이트") { _, _ -> startUpdate(r) }
+            .setNegativeButton("나중에", null)
+            .show()
+    }
+
+    /** 내려받고 설치. 이 앱의 '출처를 알 수 없는 앱 설치'가 꺼져 있으면 먼저 켜도록 안내 */
+    private fun startUpdate(r: Updater.Release) {
+        if (!packageManager.canRequestPackageInstalls()) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("설치 허용이 필요해요")
+                .setMessage("새 버전을 설치하려면 '사진 정리'의 '출처를 알 수 없는 앱 설치'를 허용해 주세요.\n\n다음 화면에서 스위치를 켜고 돌아오면 바로 이어서 설치해요.")
+                .setPositiveButton("허용하러 가기") { _, _ ->
+                    pendingRelease = r
+                    startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                }
+                .setNegativeButton("취소", null)
+                .show()
+            return
+        }
+        val dp = resources.displayMetrics.density
+        val text = TextView(this).apply {
+            setTextColor(ContextCompat.getColor(context, R.color.text2))
+            textSize = 14f
+            text = "내려받는 중…"
+        }
+        val bar = LinearProgressIndicator(this).apply { isIndeterminate = true }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((24 * dp).toInt(), (8 * dp).toInt(), (24 * dp).toInt(), 0)
+            addView(text)
+            addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (14 * dp).toInt()
+            })
+        }
+        var cancelled = false
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle("새 버전 ${r.version}")
+            .setView(box)
+            .setCancelable(false)
+            .setNegativeButton("취소") { _, _ -> cancelled = true }
+            .show()
+        io.execute {
+            var lastPost = 0L
+            val result = runCatching {
+                val file = Updater.download(this, r, { cancelled }) { got, total ->
+                    val now = System.currentTimeMillis()
+                    if (now - lastPost > 150 || got == total) {
+                        lastPost = now
+                        main.post {
+                            if (total > 0) {
+                                bar.isIndeterminate = false
+                                bar.max = 1000
+                                bar.setProgressCompat((got * 1000 / total).toInt(), true)
+                                text.text = "내려받는 중… ${Formatter.formatShortFileSize(this, got)} / ${Formatter.formatShortFileSize(this, total)}"
+                            }
+                        }
+                    }
+                }
+                if (file != null) {
+                    main.post { text.text = "설치 준비 중…"; bar.isIndeterminate = true }
+                    Updater.install(this, file)
+                }
+                file
+            }
+            main.post {
+                if (dialog.isShowing) dialog.dismiss()
+                result.exceptionOrNull()?.let {
+                    Toast.makeText(this, "업데이트하지 못했어요: ${it.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    /** 설치 결과 (PackageInstaller 가 보내 줌) */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action != Updater.ACTION_INSTALL_STATUS) return
+        when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                val confirm = if (Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT)
+                }
+                confirm?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }
+            PackageInstaller.STATUS_SUCCESS -> Toast.makeText(this, "업데이트를 설치했어요", Toast.LENGTH_SHORT).show()
+            PackageInstaller.STATUS_FAILURE_ABORTED -> Unit // 사용자가 취소
+            else -> {
+                val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "오류 $status"
+                Toast.makeText(this, "설치하지 못했어요: $msg", Toast.LENGTH_LONG).show()
+            }
         }
     }
 

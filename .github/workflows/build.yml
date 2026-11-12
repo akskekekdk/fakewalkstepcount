@@ -2,9 +2,13 @@ name: Build APK
 on:
   push:
   workflow_dispatch:
+permissions:
+  contents: write   # 릴리즈 만들기
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VERSION: 2.1.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -13,10 +17,17 @@ jobs:
           java-version: 17
       # GitHub 의 ubuntu 러너에는 Android SDK 가 이미 설치돼 있음 (ANDROID_HOME).
       # 부족한 SDK 구성요소는 Gradle(Android 플러그인)이 알아서 내려받는다.
-      - name: Check Android SDK
-        run: echo "ANDROID_HOME=$ANDROID_HOME" && ls "$ANDROID_HOME"
-      - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+      - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon -PbuildNumber=${{ github.run_number }}
+      - run: cp app/build/outputs/apk/debug/app-debug.apk "PhotoClean-$VERSION.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: PhotoClean-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: PhotoClean-${{ env.VERSION }}.apk
+      # 앱의 '새 버전 확인'이 이 릴리즈를 받아 간다
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' > notes.txt
+          gh release create "v$VERSION" "PhotoClean-$VERSION.apk" \
+            --title "사진 정리 $VERSION" --notes-file notes.txt --target "$GITHUB_SHA" --latest

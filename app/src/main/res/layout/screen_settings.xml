@@ -105,6 +105,26 @@
                 <TextView android:id="@+id/tvManage" style="@style/PhotoClean.SettingsValue" />
             </LinearLayout>
 
+            <TextView style="@style/PhotoClean.SettingsSection" android:text="업데이트" />
+            <LinearLayout android:id="@+id/rowUpdate" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="새 버전 확인" />
+                    <TextView android:id="@+id/tvCurrentVersion" style="@style/PhotoClean.SettingsSub" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvUpdate" style="@style/PhotoClean.SettingsValue" android:text="확인하기" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowAutoUpdate" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="자동으로 확인" />
+                    <TextView style="@style/PhotoClean.SettingsSub" android:text="앱을 켤 때 새 버전이 있으면 알려줘요 (하루 2번까지)" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/swAutoUpdate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/tvVersion"
                 android:layout_width="match_parent"

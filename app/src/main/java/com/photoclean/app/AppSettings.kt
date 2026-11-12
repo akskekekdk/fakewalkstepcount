@@ -42,6 +42,15 @@ class AppSettings(context: Context) {
         get() = p.getLong("last_photo_id", -1)
         set(v) = p.edit().putLong("last_photo_id", v).apply()
 
+    /** 앱 켤 때 새 버전 확인 (기본 켜짐) */
+    var autoUpdate: Boolean
+        get() = p.getBoolean("auto_update", true)
+        set(v) = p.edit().putBoolean("auto_update", v).apply()
+
+    var lastUpdateCheck: Long
+        get() = p.getLong("last_update_check", 0)
+        set(v) = p.edit().putLong("last_update_check", v).apply()
+
     private fun enumOr(name: String?, def: SwipeAction) =
         SwipeAction.entries.firstOrNull { it.name == name } ?: def
 }

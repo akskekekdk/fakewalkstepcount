@@ -40,8 +40,12 @@ class UpdaterTest {
     }
 
     @Test
-    fun localBuildVersion() {
-        // 직접 빌드는 2.1.0 → GitHub 빌드(2.1.N)가 항상 더 새 버전
-        assertTrue(Updater.compareVersions("2.1.1", BuildConfig.VERSION_NAME) > 0)
+    fun buildVersionFollowsBuildNumber() {
+        // 버전 = 2.1.<빌드 번호>, versionCode = 100 + 빌드 번호 → 다음 빌드가 항상 더 새 버전
+        val parts = Updater.versionParts(BuildConfig.VERSION_NAME)
+        assertEquals(listOf(2, 1), parts.take(2))
+        assertEquals(100 + parts[2], BuildConfig.VERSION_CODE)
+        val next = "2.1.${parts[2] + 1}"
+        assertTrue(Updater.compareVersions(next, BuildConfig.VERSION_NAME) > 0)
     }
 }

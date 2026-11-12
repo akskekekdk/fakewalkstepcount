@@ -4,117 +4,138 @@
     android:id="@+id/gridScreen"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/bg"
     android:orientation="vertical">
 
-    <!-- 기본 머리말 -->
-    <LinearLayout
-        android:id="@+id/headerNormal"
+    <!-- 머리말: 섬 풍경 위에 제목 -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="20dp"
-        android:paddingTop="14dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="6dp">
+        android:layout_height="wrap_content">
 
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="112dp"
+            android:layout_gravity="bottom"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:src="@drawable/header_scene" />
+
+        <!-- 기본 머리말 -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:id="@+id/headerNormal"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="44dp">
 
-            <TextView
-                android:id="@+id/gridTitle"
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/gridTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="사진 정리"
+                    android:textColor="@color/text"
+                    android:textSize="30sp" />
+
+                <TextView
+                    android:id="@+id/gridCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/text2"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGridUndo"
+                style="@style/Widget.PhotoClean.IconButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="사진 정리"
-                android:textColor="@color/text"
-                android:textSize="26sp"
-                android:textStyle="bold" />
+                android:contentDescription="되돌리기"
+                android:visibility="gone"
+                app:icon="@drawable/ic_undo" />
 
-            <TextView
-                android:id="@+id/gridCount"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenTrash"
+                style="@style/Widget.PhotoClean.IconButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:contentDescription="휴지통"
+                app:icon="@drawable/ic_delete" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSettings"
+                style="@style/Widget.PhotoClean.IconButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="설정"
+                app:icon="@drawable/ic_settings" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSelect"
+                style="@style/PhotoClean.Button3D.Green"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginStart="2dp"
                 android:layout_marginTop="2dp"
-                android:textColor="@color/text2"
-                android:textSize="13sp" />
+                android:layout_marginEnd="8dp"
+                android:minWidth="0dp"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:text="선택"
+                android:textSize="15sp" />
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnGridUndo"
-            style="@style/Widget.PhotoClean.IconButton"
-            android:layout_width="wrap_content"
+        <!-- 선택 모드 머리말 -->
+        <LinearLayout
+            android:id="@+id/headerSelect"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:contentDescription="되돌리기"
-            android:visibility="gone"
-            app:icon="@drawable/ic_undo" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="56dp"
+            android:visibility="gone">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnOpenTrash"
-            style="@style/Widget.PhotoClean.IconButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="휴지통"
-            app:icon="@drawable/ic_delete" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSelCancel"
+                style="@style/Widget.PhotoClean.IconButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="선택 취소"
+                app:icon="@drawable/ic_close" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSettings"
-            style="@style/Widget.PhotoClean.IconButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="설정"
-            app:icon="@drawable/ic_settings" />
+            <TextView
+                android:id="@+id/selTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:textColor="@color/text"
+                android:textSize="24sp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSelect"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="8dp"
-            android:text="선택" />
-    </LinearLayout>
-
-    <!-- 선택 모드 머리말 -->
-    <LinearLayout
-        android:id="@+id/headerSelect"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingTop="14dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="6dp"
-        android:visibility="gone">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSelCancel"
-            style="@style/Widget.PhotoClean.IconButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="선택 취소"
-            app:icon="@drawable/ic_close" />
-
-        <TextView
-            android:id="@+id/selTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_weight="1"
-            android:textColor="@color/text"
-            android:textSize="22sp"
-            android:textStyle="bold" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSelectAll"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="전체 선택" />
-    </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSelectAll"
+                style="@style/PhotoClean.Button3D.Cream"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="전체 선택"
+                android:textSize="15sp" />
+        </LinearLayout>
+    </FrameLayout>
 
     <!-- 필터 칩 -->
     <HorizontalScrollView
@@ -122,8 +143,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:clipToPadding="false"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
+        android:paddingStart="14dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="14dp"
         android:scrollbars="none">
 
         <LinearLayout
@@ -134,18 +156,18 @@
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chipFolder"
-                style="@style/Widget.Material3.Chip.Assist"
+                style="@style/PhotoClean.Chip.Folder"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="모든 폴더"
                 app:chipIcon="@drawable/ic_folder"
-                app:chipIconTint="@color/primary"
+                app:chipIconTint="@color/wood"
                 app:closeIcon="@drawable/ic_expand"
                 app:closeIconEnabled="true"
                 app:closeIconTint="@color/text2" />
 
             <View
-                android:layout_width="1dp"
+                android:layout_width="2dp"
                 android:layout_height="20dp"
                 android:layout_marginStart="10dp"
                 android:layout_marginEnd="10dp"
@@ -162,21 +184,21 @@
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipAll"
-                    style="@style/Widget.Material3.Chip.Filter"
+                    style="@style/PhotoClean.Chip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="전체" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipFav"
-                    style="@style/Widget.Material3.Chip.Filter"
+                    style="@style/PhotoClean.Chip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="즐겨찾기" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipBlur"
-                    style="@style/Widget.Material3.Chip.Filter"
+                    style="@style/PhotoClean.Chip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="흐린 사진" />
@@ -189,14 +211,15 @@
         android:id="@+id/gridBanner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
+        android:layout_marginStart="14dp"
         android:layout_marginTop="6dp"
-        android:layout_marginEnd="16dp"
+        android:layout_marginEnd="14dp"
         android:visibility="gone"
         app:cardBackgroundColor="@color/amber_container"
-        app:cardCornerRadius="16dp"
-        app:strokeColor="#4DFFC857"
-        app:strokeWidth="1dp">
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/amber"
+        app:strokeWidth="1.5dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -213,8 +236,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="'미디어 관리' 권한을 켜면 확인창 없이 바로 지워져요"
-                android:textColor="@color/amber"
-                android:textSize="13sp" />
+                android:textColor="@color/wood_dark"
+                android:textSize="14sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/bannerOn"
@@ -222,7 +245,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="켜기"
-                android:textColor="@color/amber" />
+                android:textColor="@color/wood_dark" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -232,9 +255,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="20dp"
+        android:paddingStart="22dp"
         android:paddingTop="8dp"
-        android:paddingEnd="20dp"
+        android:paddingEnd="22dp"
         android:visibility="gone">
 
         <TextView
@@ -242,20 +265,23 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/text2"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
 
         <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/blurProgress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            app:trackCornerRadius="4dp" />
+            app:indicatorColor="@color/primary"
+            app:trackColor="@color/surface2"
+            app:trackCornerRadius="6dp"
+            app:trackThickness="8dp" />
     </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="2dp"
         android:layout_weight="1">
 
         <androidx.recyclerview.widget.RecyclerView
@@ -263,6 +289,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
             android:paddingBottom="96dp"
             android:scrollbars="none" />
 
@@ -278,12 +306,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
+            android:drawablePadding="14dp"
             android:gravity="center"
             android:lineSpacingExtra="4dp"
             android:padding="32dp"
             android:textColor="@color/text2"
-            android:textSize="16sp"
-            android:visibility="gone" />
+            android:textSize="17sp"
+            android:visibility="gone"
+            android:drawableTop="@drawable/illus_sprout" />
 
         <com.google.android.material.progressindicator.CircularProgressIndicator
             android:id="@+id/gridLoading"
@@ -291,7 +321,8 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:indeterminate="true"
-            android:visibility="gone" />
+            android:visibility="gone"
+            app:indicatorColor="@color/primary" />
 
         <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
             android:id="@+id/btnResume"
@@ -300,8 +331,12 @@
             android:layout_gravity="bottom|end"
             android:layout_margin="20dp"
             android:text="이어서 보기"
+            android:textColor="@color/on_primary"
             android:visibility="gone"
-            app:icon="@drawable/ic_play" />
+            app:backgroundTint="@color/primary"
+            app:icon="@drawable/ic_play"
+            app:iconTint="@color/on_primary"
+            app:shapeAppearanceOverlay="@style/PhotoClean.Shape.Round" />
     </FrameLayout>
 
     <!-- 선택 모드 하단 -->
@@ -310,9 +345,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_bottom_bar"
-        android:elevation="8dp"
+        android:elevation="10dp"
         android:paddingStart="16dp"
-        android:paddingTop="12dp"
+        android:paddingTop="14dp"
         android:paddingEnd="16dp"
         android:paddingBottom="14dp"
         android:visibility="gone">
@@ -321,9 +356,8 @@
             android:id="@+id/btnTrashSelected"
             style="@style/Widget.PhotoClean.Button.Danger"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="60dp"
             android:text="사진을 골라주세요"
-            app:cornerRadius="28dp"
             app:icon="@drawable/ic_delete"
             app:iconGravity="textStart" />
     </FrameLayout>

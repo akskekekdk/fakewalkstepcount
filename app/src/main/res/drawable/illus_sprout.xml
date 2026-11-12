@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 빈 화면용: 화분에 새싹 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="96" android:viewportHeight="96">
+    <path android:fillColor="#FFF2E4C8" android:pathData="M48,86m-34,0a34,6 0,1 1,68 0a34,6 0,1 1,-68 0" />
+    <path android:fillColor="#FFB98455" android:pathData="M30,56h36l-4,28a4,4 0,0 1,-4 3.5h-20a4,4 0,0 1,-4 -3.5z" />
+    <path android:fillColor="#FF8F603A" android:pathData="M27,52h42a3,3 0,0 1,3 3v3a3,3 0,0 1,-3 3h-42a3,3 0,0 1,-3 -3v-3a3,3 0,0 1,3 -3z" />
+    <path android:fillColor="#FF4FA568" android:pathData="M46.5,52h3v-22h-3z" />
+    <path android:fillColor="#FF6DB86A" android:pathData="M48,38C40,38 33,33 32,24C40,24 47,29 48,38z" />
+    <path android:fillColor="#FF4FA568" android:pathData="M48,32C49,22 56,15 66,15C66,24 58,32 48,32z" />
+</vector>

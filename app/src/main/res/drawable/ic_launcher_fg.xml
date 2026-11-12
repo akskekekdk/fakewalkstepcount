@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 기울어진 즉석사진 + 새싹 + 반짝이 (오리지널 아이콘) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 원형 마스크에서도 잘리지 않게 가운데 안전 영역으로 축소 -->
+    <group android:scaleX="0.74" android:scaleY="0.74" android:pivotX="54" android:pivotY="54" android:translateY="2">
+    <group android:rotation="-8" android:pivotX="54" android:pivotY="56">
+            <path android:fillColor="#40000000" android:pathData="M37,32h36a4,4 0,0 1,4 4v40a4,4 0,0 1,-4 4h-36a4,4 0,0 1,-4 -4v-40a4,4 0,0 1,4 -4z" />
+            <path android:fillColor="#FFFFFBF1" android:pathData="M36,30h36a4,4 0,0 1,4 4v40a4,4 0,0 1,-4 4h-36a4,4 0,0 1,-4 -4v-40a4,4 0,0 1,4 -4z" />
+            <path android:fillColor="#FFCDEFFA" android:pathData="M38,35h32v28h-32z" />
+            <path android:fillColor="#FFF5B83D" android:pathData="M62,42m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+            <path android:fillColor="#FF8CCB7A" android:pathData="M38,56Q46,48 54,54T70,52L70,63L38,63z" />
+            <path android:fillColor="#FF6DB86A" android:pathData="M38,60Q48,54 58,59T70,58L70,63L38,63z" />
+        </group>
+        <path android:fillColor="#FF4FA568" android:pathData="M70.5,36h3v-10h-3z" />
+        <path android:fillColor="#FF6DB86A" android:pathData="M72,30C67,30 63,27 62,21C67,21 71,24 72,30z" />
+        <path android:fillColor="#FF4FA568" android:pathData="M72,27C73,21 77,17 83,17C83,23 78,27 72,27z" />
+        <path android:fillColor="#FFF5B83D" android:pathData="M31,24L33,30L39,32L33,34L31,40L29,34L23,32L29,30z" />
+        <path android:fillColor="#FFFF6F8E" android:pathData="M78,72c-1.6,-1.8 -4.5,-1.2 -4.5,1.3c0,2.4 4.5,5.2 4.5,5.2s4.5,-2.8 4.5,-5.2c0,-2.5 -2.9,-3.1 -4.5,-1.3z" />
+    </group>
+</vector>

@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.PhotoClean" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.PhotoClean" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorOnPrimary">@color/on_primary</item>
         <item name="colorPrimaryContainer">@color/primary_container</item>
         <item name="colorOnPrimaryContainer">@color/on_primary_container</item>
-        <item name="colorSecondaryContainer">@color/surface3</item>
+        <item name="colorSecondary">@color/wood</item>
+        <item name="colorSecondaryContainer">@color/surface2</item>
         <item name="colorOnSecondaryContainer">@color/text</item>
         <item name="colorSurface">@color/surface</item>
         <item name="colorOnSurface">@color/text</item>
         <item name="colorOnSurfaceVariant">@color/text2</item>
-        <item name="colorSurfaceContainerHigh">@color/surface2</item>
-        <item name="colorSurfaceContainerLow">@color/surface</item>
+        <item name="colorSurfaceContainerHigh">@color/surface</item>
+        <item name="colorSurfaceContainerLow">@color/bg</item>
+        <item name="colorSurfaceContainer">@color/surface</item>
         <item name="colorOutline">@color/outline</item>
         <item name="colorOutlineVariant">@color/outline</item>
         <item name="colorError">@color/danger</item>
@@ -19,23 +21,95 @@
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@color/bg</item>
         <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+
+        <!-- 둥근 한글 글꼴 -->
+        <item name="android:fontFamily">@font/jua</item>
+        <item name="fontFamily">@font/jua</item>
+        <item name="android:textViewStyle">@style/PhotoClean.Text</item>
+        <item name="textAppearanceLabelLarge">@style/PhotoClean.TextAppearance.Label</item>
+        <item name="textAppearanceLabelMedium">@style/PhotoClean.TextAppearance.Label</item>
+        <item name="textAppearanceBodyLarge">@style/PhotoClean.TextAppearance.Body</item>
+        <item name="textAppearanceBodyMedium">@style/PhotoClean.TextAppearance.Body</item>
+        <item name="textAppearanceHeadlineSmall">@style/PhotoClean.TextAppearance.Body</item>
+        <item name="textAppearanceTitleLarge">@style/PhotoClean.TextAppearance.Body</item>
+
+        <!-- 아주 둥근 모양 -->
+        <item name="shapeAppearanceCornerSmall">@style/PhotoClean.Shape.Round</item>
+        <item name="shapeAppearanceCornerMedium">@style/PhotoClean.Shape.Round</item>
+        <item name="shapeAppearanceCornerLarge">@style/PhotoClean.Shape.Round</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/PhotoClean.Shape.Round</item>
+        <item name="chipStyle">@style/PhotoClean.Chip</item>
     </style>
 
-    <!-- 빨간 '휴지통' 버튼 -->
-    <style name="Widget.PhotoClean.Button.Danger" parent="Widget.Material3.Button">
-        <item name="backgroundTint">@color/danger_bg</item>
-        <item name="android:textColor">@color/danger_fg</item>
-        <item name="iconTint">@color/danger_fg</item>
-        <item name="android:textSize">16sp</item>
-        <item name="android:textStyle">bold</item>
+    <style name="PhotoClean.Text" parent="android:Widget.TextView">
+        <item name="android:fontFamily">@font/jua</item>
+    </style>
+    <style name="PhotoClean.TextAppearance.Label" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:fontFamily">@font/jua</item>
+        <item name="fontFamily">@font/jua</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+    <style name="PhotoClean.TextAppearance.Body" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:fontFamily">@font/jua</item>
+        <item name="fontFamily">@font/jua</item>
+    </style>
+    <style name="PhotoClean.Shape.Round" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
     </style>
 
-    <!-- 아이콘만 있는 둥근 버튼 -->
-    <style name="Widget.PhotoClean.IconButton" parent="Widget.Material3.Button.IconButton">
+    <!-- 칩: 크림 바탕 + 갈색 테두리, 고르면 초록 -->
+    <style name="PhotoClean.Chip" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">@color/chip_bg</item>
+        <item name="chipStrokeColor">@color/chip_stroke</item>
+        <item name="chipStrokeWidth">1.5dp</item>
+        <item name="android:textColor">@color/chip_text</item>
+        <item name="checkedIconTint">@color/on_primary</item>
+        <item name="chipCornerRadius">20dp</item>
+        <item name="android:textAppearance">@style/PhotoClean.TextAppearance.Label</item>
+    </style>
+    <style name="PhotoClean.Chip.Folder" parent="Widget.Material3.Chip.Assist">
+        <item name="chipBackgroundColor">@color/surface</item>
+        <item name="chipStrokeColor">@color/wood</item>
+        <item name="chipStrokeWidth">1.5dp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="chipCornerRadius">20dp</item>
+        <item name="android:textAppearance">@style/PhotoClean.TextAppearance.Label</item>
+    </style>
+
+    <!-- 통통한 입체 버튼 (아래쪽 그림자 턱) -->
+    <style name="PhotoClean.Button3D" parent="Widget.Material3.Button">
+        <item name="backgroundTint">@null</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+        <item name="iconTint">#FFFFFFFF</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="elevation">0dp</item>
+    </style>
+    <style name="Widget.PhotoClean.Button.Danger" parent="PhotoClean.Button3D">
+        <item name="android:background">@drawable/btn3d_coral</item>
+        <item name="android:textColor">@color/btn3d_text</item>
+        <item name="iconTint">@color/btn3d_text</item>
+    </style>
+    <style name="PhotoClean.Button3D.Green">
+        <item name="android:background">@drawable/btn3d_green</item>
+    </style>
+    <style name="PhotoClean.Button3D.Cream">
+        <item name="android:background">@drawable/btn3d_cream</item>
+        <item name="android:textColor">@color/text</item>
         <item name="iconTint">@color/text</item>
-        <item name="iconSize">22dp</item>
     </style>
 
+    <!-- 아이콘 버튼 -->
+    <style name="Widget.PhotoClean.IconButton" parent="Widget.Material3.Button.IconButton">
+        <item name="iconTint">@color/wood_dark</item>
+        <item name="iconSize">24dp</item>
+    </style>
     <style name="Widget.PhotoClean.IconButton.Tonal" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
         <item name="iconTint">@color/text</item>
         <item name="iconSize">24dp</item>
@@ -45,14 +119,12 @@
     <style name="PhotoClean.SettingsSection" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:paddingStart">20dp</item>
-        <item name="android:paddingTop">22dp</item>
-        <item name="android:paddingBottom">6dp</item>
-        <item name="android:textColor">@color/primary</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:paddingStart">28dp</item>
+        <item name="android:paddingTop">20dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:textColor">@color/wood_dark</item>
+        <item name="android:textSize">15sp</item>
     </style>
-
     <style name="PhotoClean.SettingsRow" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -61,33 +133,38 @@
         <item name="android:gravity">center_vertical</item>
         <item name="android:paddingStart">20dp</item>
         <item name="android:paddingEnd">20dp</item>
-        <item name="android:paddingTop">10dp</item>
-        <item name="android:paddingBottom">10dp</item>
-        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:layout_marginStart">16dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:background">@drawable/card_row</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
     </style>
-
     <style name="PhotoClean.SettingsTitle" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">@color/text</item>
-        <item name="android:textSize">16sp</item>
+        <item name="android:textSize">17sp</item>
     </style>
-
     <style name="PhotoClean.SettingsSub" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:layout_marginTop">3dp</item>
         <item name="android:textColor">@color/text2</item>
         <item name="android:textSize">13sp</item>
     </style>
-
     <style name="PhotoClean.SettingsValue" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginStart">12dp</item>
-        <item name="android:textColor">@color/primary</item>
+        <item name="android:background">@drawable/pill_green_soft</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingTop">5dp</item>
+        <item name="android:paddingBottom">5dp</item>
+        <item name="android:textColor">@color/on_primary_container</item>
         <item name="android:textSize">14sp</item>
     </style>
 </resources>

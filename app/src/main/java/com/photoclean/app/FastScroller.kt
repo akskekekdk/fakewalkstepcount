@@ -36,15 +36,23 @@ class FastScroller @JvmOverloads constructor(
     private val edge = 6 * dp
 
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.primary)
+        color = ContextCompat.getColor(context, R.color.wood)
     }
+    /** 날짜 말풍선: 나무 표지판 */
     private val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.primary_container)
+        color = ContextCompat.getColor(context, R.color.wood)
+    }
+    private val bubbleLipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.wood_dark)
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        textSize = 15 * resources.displayMetrics.scaledDensity
-        typeface = Typeface.DEFAULT_BOLD
+        color = ContextCompat.getColor(context, R.color.cream)
+        textSize = 16 * resources.displayMetrics.scaledDensity
+        typeface = try {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.jua)
+        } catch (e: Exception) {
+            null
+        } ?: Typeface.DEFAULT_BOLD
     }
     private val rect = RectF()
 
@@ -100,8 +108,11 @@ class FastScroller @JvmOverloads constructor(
                 val bw = tw + 36 * dp
                 val cy = (top + thumbH / 2).coerceIn(bh / 2, height - bh / 2)
                 val right = width - edge - thumbWActive - 14 * dp
+                val r = 14 * dp
+                rect.set(right - bw, cy - bh / 2 + 3 * dp, right, cy + bh / 2 + 3 * dp)
+                canvas.drawRoundRect(rect, r, r, bubbleLipPaint)
                 rect.set(right - bw, cy - bh / 2, right, cy + bh / 2)
-                canvas.drawRoundRect(rect, bh / 2, bh / 2, bubblePaint)
+                canvas.drawRoundRect(rect, r, r, bubblePaint)
                 val fm = textPaint.fontMetrics
                 canvas.drawText(label, rect.left + 18 * dp, cy - (fm.ascent + fm.descent) / 2, textPaint)
             }

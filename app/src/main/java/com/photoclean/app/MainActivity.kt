@@ -676,7 +676,7 @@ class MainActivity : AppCompatActivity() {
                 return HeaderHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_month_header, parent, false))
             }
             val cell = GridCell(parent.context)
-            val gap = (1 * parent.resources.displayMetrics.density).toInt()
+            val gap = (2 * parent.resources.displayMetrics.density).toInt()
             cell.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { setMargins(gap, gap, gap, gap) }
             val h = CellHolder(cell)
@@ -870,7 +870,7 @@ class MainActivity : AppCompatActivity() {
         ).joinToString("  ·  ")
         btnFav.setIconResource(if (p.favorite) R.drawable.ic_heart else R.drawable.ic_heart_outline)
         btnFav.iconTint = ColorStateList.valueOf(
-            ContextCompat.getColor(this, if (p.favorite) R.color.heart else R.color.text)
+            ContextCompat.getColor(this, if (p.favorite) R.color.heart else R.color.wood_dark)
         )
 
         displayImage(p)

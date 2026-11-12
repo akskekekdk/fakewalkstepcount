@@ -1,20 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#FF0E0F13</color>
-    <color name="surface">#FF16181E</color>
-    <color name="surface2">#FF1F222A</color>
-    <color name="surface3">#FF2A2E38</color>
-    <color name="outline">#FF353A46</color>
-    <color name="primary">#FF8AB4FF</color>
-    <color name="on_primary">#FF0A1A38</color>
-    <color name="primary_container">#FF22365E</color>
-    <color name="on_primary_container">#FFD9E5FF</color>
-    <color name="danger">#FFFF5C61</color>
-    <color name="danger_container">#FF3A1A1D</color>
-    <color name="text">#FFF3F4F7</color>
-    <color name="text2">#FFA3A9B5</color>
-    <color name="text3">#FF6C7280</color>
-    <color name="amber">#FFFFC857</color>
-    <color name="amber_container">#FF2C2615</color>
-    <color name="heart">#FFFF6B81</color>
+    <!-- 포근한 섬 테마: 크림 종이 · 잎사귀 초록 · 나무 갈색 -->
+    <color name="bg">#FFFFF4DF</color>
+    <color name="surface">#FFFFFBF1</color>
+    <color name="surface2">#FFF2E4C8</color>
+    <color name="surface3">#FFE8D7B6</color>
+    <color name="outline">#FFE0CDA8</color>
+    <color name="primary">#FF4FA568</color>
+    <color name="primary_dark">#FF3A8551</color>
+    <color name="on_primary">#FFFFFFFF</color>
+    <color name="primary_container">#FFD9F1D3</color>
+    <color name="on_primary_container">#FF24532F</color>
+    <color name="danger">#FFF27A68</color>
+    <color name="danger_dark">#FFCC5D4D</color>
+    <color name="danger_container">#FFF8DCD4</color>
+    <color name="text">#FF5A4433</color>
+    <color name="text2">#FF8C7560</color>
+    <color name="text3">#FFB7A48D</color>
+    <color name="amber">#FFF5B83D</color>
+    <color name="amber_container">#FFFFF0C9</color>
+    <color name="heart">#FFFF6F8E</color>
+    <color name="wood">#FFB98455</color>
+    <color name="wood_dark">#FF8F603A</color>
+    <color name="cream">#FFFFF8E8</color>
+    <color name="sky">#FFA8DDF0</color>
+    <color name="viewer_bg">#FF26332A</color>
 </resources>

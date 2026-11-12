@@ -1,10 +1,10 @@
 # 사진 정리 (PhotoClean)
 
-갤러리 사진을 한 장씩 보면서 **버튼 한 번으로 바로 휴지통**으로 보내는 안드로이드 앱입니다. (갤럭시 포함 Android 11 이상)
+포근한 섬마을 느낌의 사진 정리 앱. 갤러리 사진을 한 장씩 보면서 **버튼 한 번으로 바로 휴지통**으로 보내는 안드로이드 앱입니다. (갤럭시 포함 Android 11 이상)
 
-| 전체 보기 | 한 장 보기 | 설정 |
-|---|---|---|
-| ![](docs/screenshots/1_grid.png) | ![](docs/screenshots/3_viewer.png) | ![](docs/screenshots/4_settings.png) |
+| 아이콘 | 전체 보기 | 한 장 보기 | 설정 |
+|---|---|---|---|
+| ![](docs/screenshots/0_icon.png) | ![](docs/screenshots/1_grid.png) | ![](docs/screenshots/3_viewer.png) | ![](docs/screenshots/4_settings.png) |
 
 ## 전체 보기
 - **월별로 묶어서** 보여줌 (2026년 11월 · 11장 …)

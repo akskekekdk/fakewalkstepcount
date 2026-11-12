@@ -17,12 +17,11 @@ class GridCell(context: Context) : FrameLayout(context) {
 
     val image = ImageView(context).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP
-        setBackgroundColor(ContextCompat.getColor(context, R.color.surface2))
     }
 
-    /** 선택하면 살짝 어둡게 */
+    /** 선택하면 크림색으로 살짝 덮기 */
     private val dim = View(context).apply {
-        setBackgroundColor(0x73000000)
+        setBackgroundColor(0x66FFF4DF)
         visibility = GONE
     }
 
@@ -44,13 +43,17 @@ class GridCell(context: Context) : FrameLayout(context) {
     private val label = TextView(context).apply {
         textSize = 11f
         setTextColor(Color.WHITE)
-        setBackgroundColor(0x99000000.toInt())
+        setBackgroundColor(0xCC8F603A.toInt())
         gravity = Gravity.CENTER
         setPadding(0, (3 * dp).toInt(), 0, (3 * dp).toInt())
         visibility = GONE
     }
 
     init {
+        // 둥근 모서리 칸 (안의 사진도 같이 잘림)
+        setBackgroundResource(R.drawable.cell_bg)
+        outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+        clipToOutline = true
         addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(dim, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         val c = (22 * dp).toInt()
@@ -71,6 +74,7 @@ class GridCell(context: Context) : FrameLayout(context) {
         check.visibility = if (selectionMode) VISIBLE else GONE
         val on = selectionMode && selected
         dim.visibility = if (on) VISIBLE else GONE
+        check.elevation = 2 * dp
         if (on) {
             check.setBackgroundResource(R.drawable.cell_check_on)
             check.setImageResource(R.drawable.ic_check)
@@ -78,11 +82,9 @@ class GridCell(context: Context) : FrameLayout(context) {
             check.setBackgroundResource(R.drawable.cell_check_off)
             check.setImageDrawable(null)
         }
-        val s = if (on) 0.88f else 1f
+        val s = if (on) 0.9f else 1f
         image.scaleX = s
         image.scaleY = s
-        dim.scaleX = s
-        dim.scaleY = s
     }
 
     fun setFavorite(fav: Boolean) {

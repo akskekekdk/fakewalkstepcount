@@ -27,6 +27,9 @@ class ZoomImageView @JvmOverloads constructor(
     /** 켜져 있으면 다음 사진에서도 같은 배율·같은 부분을 확대해서 보여준다 (설정). */
     var keepZoomAcrossPhotos = true
 
+    /** 한 번 탭 (위/아래 막대 숨기기/보이기에 사용) */
+    var onSingleTap: (() -> Unit)? = null
+
     /** 확대 상태가 바뀔 때 (true = 확대 중) */
     var onZoomChanged: ((Boolean) -> Unit)? = null
 
@@ -60,6 +63,11 @@ class ZoomImageView @JvmOverloads constructor(
 
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
+
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+            onSingleTap?.invoke()
+            return true
+        }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
             if (isZoomed) {

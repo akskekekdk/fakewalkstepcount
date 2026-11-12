@@ -1,34 +1,42 @@
 package com.photoclean.app
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 
-/** 전체 보기의 정사각형 칸: 썸네일 + 선택 표시. */
+/** 전체 보기/휴지통의 정사각형 칸: 썸네일 + 선택 표시 + 하트 + 아래 글씨. */
 class GridCell(context: Context) : FrameLayout(context) {
-
-    val image = ImageView(context).apply {
-        scaleType = ImageView.ScaleType.CENTER_CROP
-        setBackgroundColor(0xFF222222.toInt())
-    }
-
-    /** 선택 시 사진을 살짝 어둡게. */
-    private val dim = View(context).apply {
-        setBackgroundColor(0x66000000)
-        visibility = GONE
-    }
 
     private val dp = context.resources.displayMetrics.density
 
-    private val check = TextView(context).apply {
-        gravity = Gravity.CENTER
-        textSize = 13f
-        setTextColor(Color.WHITE)
+    val image = ImageView(context).apply {
+        scaleType = ImageView.ScaleType.CENTER_CROP
+        setBackgroundColor(ContextCompat.getColor(context, R.color.surface2))
+    }
+
+    /** 선택하면 살짝 어둡게 */
+    private val dim = View(context).apply {
+        setBackgroundColor(0x73000000)
+        visibility = GONE
+    }
+
+    private val check = ImageView(context).apply {
+        val pad = (3 * dp).toInt()
+        setPadding(pad, pad, pad, pad)
+        imageTintList = ColorStateList.valueOf(ContextCompat.getColor(context, R.color.on_primary))
+        visibility = GONE
+    }
+
+    private val heart = ImageView(context).apply {
+        setImageResource(R.drawable.ic_heart)
+        imageTintList = ColorStateList.valueOf(ContextCompat.getColor(context, R.color.heart))
+        elevation = 2 * dp
         visibility = GONE
     }
 
@@ -38,16 +46,43 @@ class GridCell(context: Context) : FrameLayout(context) {
         setTextColor(Color.WHITE)
         setBackgroundColor(0x99000000.toInt())
         gravity = Gravity.CENTER
+        setPadding(0, (3 * dp).toInt(), 0, (3 * dp).toInt())
         visibility = GONE
     }
 
-    /** 왼쪽 위 작은 하트 (즐겨찾기) */
-    private val heart = TextView(context).apply {
-        text = "♥"
-        textSize = 14f
-        setTextColor(0xFFFF5370.toInt())
-        setShadowLayer(3f, 0f, 0f, Color.BLACK)
-        visibility = GONE
+    init {
+        addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(dim, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        val c = (22 * dp).toInt()
+        addView(check, LayoutParams(c, c, Gravity.TOP or Gravity.END).apply {
+            val m = (6 * dp).toInt()
+            setMargins(m, m, m, m)
+        })
+        val h = (16 * dp).toInt()
+        addView(heart, LayoutParams(h, h, Gravity.BOTTOM or Gravity.START).apply {
+            val m = (6 * dp).toInt()
+            setMargins(m, m, m, m)
+        })
+        addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+    }
+
+    /** selectionMode 가 아니면 체크 표시를 숨긴다. 선택된 칸은 사진이 살짝 작아진다. */
+    fun setSelectionState(selectionMode: Boolean, selected: Boolean) {
+        check.visibility = if (selectionMode) VISIBLE else GONE
+        val on = selectionMode && selected
+        dim.visibility = if (on) VISIBLE else GONE
+        if (on) {
+            check.setBackgroundResource(R.drawable.cell_check_on)
+            check.setImageResource(R.drawable.ic_check)
+        } else {
+            check.setBackgroundResource(R.drawable.cell_check_off)
+            check.setImageDrawable(null)
+        }
+        val s = if (on) 0.88f else 1f
+        image.scaleX = s
+        image.scaleY = s
+        dim.scaleX = s
+        dim.scaleY = s
     }
 
     fun setFavorite(fav: Boolean) {
@@ -57,34 +92,6 @@ class GridCell(context: Context) : FrameLayout(context) {
     fun setLabel(text: String?) {
         label.text = text ?: ""
         label.visibility = if (text == null) GONE else VISIBLE
-    }
-
-    init {
-        addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        addView(dim, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        val size = (24 * dp).toInt()
-        addView(check, LayoutParams(size, size, Gravity.TOP or Gravity.END).apply {
-            val mgn = (6 * dp).toInt()
-            setMargins(mgn, mgn, mgn, mgn)
-        })
-        addView(heart, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
-            val mgn = (5 * dp).toInt()
-            setMargins(mgn, mgn / 2, mgn, mgn)
-        })
-        label.setPadding(0, (2 * dp).toInt(), 0, (2 * dp).toInt())
-        addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
-    }
-
-    /** selectionMode 가 아니면 체크 표시를 숨긴다. */
-    fun setSelectionState(selectionMode: Boolean, selected: Boolean) {
-        check.visibility = if (selectionMode) VISIBLE else GONE
-        dim.visibility = if (selectionMode && selected) VISIBLE else GONE
-        check.text = if (selected) "✓" else ""
-        check.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            if (selected) setColor(0xFFE53935.toInt()) else setColor(0x33000000)
-            setStroke((2 * dp).toInt(), Color.WHITE)
-        }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {

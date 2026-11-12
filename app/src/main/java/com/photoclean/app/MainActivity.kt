@@ -1,11 +1,9 @@
 package com.photoclean.app
 
 import android.Manifest
-import android.app.Activity
-import android.app.AlertDialog
-import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
@@ -18,236 +16,240 @@ import android.provider.Settings
 import android.text.format.Formatter
 import android.util.LruCache
 import android.util.Size
-import android.view.ViewGroup
-import android.widget.BaseAdapter
-import android.widget.GridView
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
-import android.widget.Button
+import android.view.ViewGroup
+import android.widget.BaseAdapter
+import android.widget.GridView
 import android.widget.ImageView
-import android.widget.ProgressBar
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.widget.NestedScrollView
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.imageview.ShapeableImageView
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.progressindicator.CircularProgressIndicator
+import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.shape.ShapeAppearanceModel
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.math.abs
 
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
 
-    private data class Photo(
-        val id: Long,
-        val uri: Uri,
-        val name: String,
-        val dateMillis: Long,
-        val size: Long,
-        /** 휴지통에 있는 사진만: 자동 영구 삭제 시각 (ms) */
-        val expiresMillis: Long = 0,
-        /** 즐겨찾기(하트) 여부 — 안드로이드 표준 즐겨찾기 값 */
-        val favorite: Boolean = false,
-    )
+    private enum class Screen { GRID, VIEWER, TRASH, SETTINGS }
 
-    private lateinit var photoView: ZoomImageView
-    private lateinit var counterText: TextView
-    private lateinit var infoText: TextView
-    private lateinit var emptyText: TextView
-    private lateinit var loading: ProgressBar
-    private lateinit var manageBanner: TextView
-    private lateinit var btnTrash: Button
-    private lateinit var btnKeep: Button
-    private lateinit var btnPrev: Button
-    private lateinit var btnUndo: Button
-    private lateinit var btnBack: Button
-    private lateinit var gridScreen: View
-    private lateinit var viewerScreen: View
-    private lateinit var grid: GridView
-    private lateinit var gridCount: TextView
-    private lateinit var gridEmpty: TextView
-    private lateinit var gridLoading: ProgressBar
-    private lateinit var gridBanner: TextView
-    private lateinit var gridTitle: TextView
-    private lateinit var btnSelect: Button
-    private lateinit var btnSelCancel: Button
-    private lateinit var btnGridUndo: Button
-    private lateinit var selBar: View
-    private lateinit var btnTrashSelected: Button
+    private lateinit var settings: AppSettings
+    private var screen = Screen.GRID
 
-    /** 전체 보기 선택 모드 */
+    // ------------------------------------------------------------ 데이터
+    /** 휴지통이 아닌 모든 사진 (최신순) */
+    private val allPhotos = mutableListOf<Photo>()
+    /** 지금 보기 조건(폴더·모드)에 맞는 사진 */
+    private val photos = mutableListOf<Photo>()
+    private var rows: List<GridRow> = emptyList()
+    private var photoToRow = IntArray(0)
+    private var index = 0
+    private var viewMode = ViewMode.ALL
+    private var bucketFilter: String? = null
+    private var folders: List<Folder> = emptyList()
+
     private var selectionMode = false
     private val selected = LinkedHashSet<Long>()
-    private var columns = 4
-    private val gridAdapter = GridAdapter()
-    private lateinit var strip: RecyclerView
-    private lateinit var stripLayout: LinearLayoutManager
-    private val stripAdapter = StripAdapter()
 
-    /** true 면 즐겨찾기 사진만 보기 */
-    private var favOnly = false
-    private lateinit var tabAll: Button
-    private lateinit var tabFav: Button
-    private lateinit var btnFav: Button
+    /** 되돌리기: 한 번에 휴지통으로 보낸 묶음들 */
+    private val undoStack = ArrayDeque<List<Photo>>()
+    private var trashedCount = 0
+    private var busy = false
+
+    // 휴지통 보내기 요청 (많으면 500장씩 나눠서)
+    private val trashQueue = ArrayDeque<List<Photo>>()
+    private val trashedNow = ArrayList<Photo>()
+    private var pendingTrash: List<Photo>? = null
+    private var pendingRestore: List<Photo>? = null
     private var pendingFav: Pair<Photo, Boolean>? = null
-    private val prefs by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
 
     // 휴지통 화면
-    private lateinit var trashScreen: View
-    private lateinit var trashGrid: GridView
-    private lateinit var trashTitle: TextView
-    private lateinit var trashEmpty: TextView
-    private lateinit var trashLoading: ProgressBar
-    private lateinit var btnTrashSelectAll: Button
-    private lateinit var btnRestoreSelected: Button
-    private lateinit var btnDeleteForever: Button
-    private val trashed = mutableListOf<Photo>()
-    private val trashSelected = LinkedHashSet<Long>()
-    private val trashAdapter = TrashAdapter()
-    /** 휴지통 화면에서 진행 중인 복원/영구삭제 요청 (많으면 나눠서) */
+    private val binItems = mutableListOf<Photo>()
+    private val binSelected = LinkedHashSet<Long>()
     private val binQueue = ArrayDeque<List<Photo>>()
-    private var binRequestCode = 0
+    private var binCode = 0
     private var binDone = 0
+    private val binAffected = HashSet<Long>()
+
+    // 흐린 사진
+    private val blurScores = ConcurrentHashMap<Long, Float>()
+    private var blurScanning = false
+
+    // ------------------------------------------------------------ 기반
+    private val io = Executors.newFixedThreadPool(2)
     private val thumbIo = Executors.newFixedThreadPool(3)
+    private val blurIo = Executors.newSingleThreadExecutor()
+    private val main = Handler(Looper.getMainLooper())
     private val thumbCache = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
         override fun sizeOf(key: Long, value: Bitmap) = value.allocationByteCount
     }
-
-    private val photos = mutableListOf<Photo>()
-    private var index = 0
-
-    /** 되돌리기용: 한 번에 지운 묶음 = [(사진, 원래 위치)] (위치 오름차순) */
-    private val undoStack = ArrayDeque<List<Pair<Photo, Int>>>()
-
-    /** 휴지통으로 보내는 중인 사진들 (많으면 나눠서 요청) */
-    private val trashQueue = ArrayDeque<List<Photo>>()
-    private val trashBatch = ArrayList<Pair<Photo, Int>>()
-    private var pendingTrash: List<Photo>? = null
-    private var pendingRestore: List<Pair<Photo, Int>>? = null
-    private var busy = false
-    private var trashedCount = 0
-
-    private val io = Executors.newFixedThreadPool(2)
-    private val main = Handler(Looper.getMainLooper())
-    /** 크게 보기용 사진 캐시 (확대해도 선명하도록 화면보다 크게 디코딩하므로 용량 기준) */
+    /** 크게 보기용 (확대해도 선명하도록 화면보다 크게 디코딩) */
     private val cache = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 4).toInt()) {
         override fun sizeOf(key: Long, value: Bitmap) = value.allocationByteCount
     }
     private var loadToken = 0
     private var loaded = false
-    private var askedManageThisSession = false
+    private var askedManage = false
+    private var resumeChecked = false
+    private var chromeVisible = true
+
+    // ------------------------------------------------------------ 화면 요소
+    private lateinit var gridScreen: View
+    private lateinit var viewerScreen: View
+    private lateinit var trashScreen: View
+    private lateinit var settingsScreen: View
+
+    private lateinit var headerNormal: View
+    private lateinit var headerSelect: View
+    private lateinit var gridTitle: TextView
+    private lateinit var gridCount: TextView
+    private lateinit var selTitle: TextView
+    private lateinit var btnGridUndo: MaterialButton
+    private lateinit var btnSelect: MaterialButton
+    private lateinit var btnSelectAll: MaterialButton
+    private lateinit var chipFolder: Chip
+    private lateinit var chipGroupMode: ChipGroup
+    private lateinit var gridBanner: MaterialCardView
+    private lateinit var blurProgressBox: View
+    private lateinit var blurProgressText: TextView
+    private lateinit var blurProgress: LinearProgressIndicator
+    private lateinit var grid: RecyclerView
+    private lateinit var gridLayout: GridLayoutManager
+    private lateinit var fastScroller: FastScroller
+    private lateinit var gridEmpty: TextView
+    private lateinit var gridLoading: CircularProgressIndicator
+    private lateinit var btnResume: ExtendedFloatingActionButton
+    private lateinit var selBar: View
+    private lateinit var btnTrashSelected: MaterialButton
+    private val gridAdapter = PhotoGridAdapter()
+
+    private lateinit var photoView: ZoomImageView
+    private lateinit var loading: CircularProgressIndicator
+    private lateinit var emptyText: TextView
+    private lateinit var viewerTop: View
+    private lateinit var viewerBottom: View
+    private lateinit var counterText: TextView
+    private lateinit var infoText: TextView
+    private lateinit var zoomPill: TextView
+    private lateinit var hintText: TextView
+    private lateinit var btnFav: MaterialButton
+    private lateinit var btnUndo: MaterialButton
+    private lateinit var btnPrev: MaterialButton
+    private lateinit var btnTrash: MaterialButton
+    private lateinit var btnKeep: MaterialButton
+    private lateinit var strip: RecyclerView
+    private lateinit var stripLayout: LinearLayoutManager
+    private val stripAdapter = StripAdapter()
+
+    private lateinit var trashGrid: GridView
+    private lateinit var trashTitle: TextView
+    private lateinit var trashEmpty: TextView
+    private lateinit var trashLoading: CircularProgressIndicator
+    private lateinit var btnTrashSelectAll: MaterialButton
+    private lateinit var btnRestoreSelected: MaterialButton
+    private lateinit var btnDeleteForever: MaterialButton
+    private val trashAdapter = TrashAdapter()
+
+    private lateinit var swKeepZoom: MaterialSwitch
+    private lateinit var swResume: MaterialSwitch
+    private lateinit var tvSwipeSide: TextView
+    private lateinit var tvSwipeUp: TextView
+    private lateinit var tvSwipeDown: TextView
+    private lateinit var tvBlur: TextView
+    private lateinit var tvManage: TextView
+
+    // ============================================================ 시작
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        settings = AppSettings(this)
 
-        photoView = findViewById(R.id.photo)
-        counterText = findViewById(R.id.counter)
-        infoText = findViewById(R.id.info)
-        emptyText = findViewById(R.id.empty)
-        loading = findViewById(R.id.loading)
-        manageBanner = findViewById(R.id.manageBanner)
-        btnTrash = findViewById(R.id.btnTrash)
-        btnKeep = findViewById(R.id.btnKeep)
-        btnPrev = findViewById(R.id.btnPrev)
-        btnUndo = findViewById(R.id.btnUndo)
-        btnBack = findViewById(R.id.btnBack)
         gridScreen = findViewById(R.id.gridScreen)
         viewerScreen = findViewById(R.id.viewerScreen)
-        grid = findViewById(R.id.grid)
-        gridCount = findViewById(R.id.gridCount)
-        gridEmpty = findViewById(R.id.gridEmpty)
-        gridLoading = findViewById(R.id.gridLoading)
-        gridBanner = findViewById(R.id.gridBanner)
-        gridTitle = findViewById(R.id.gridTitle)
-        btnSelect = findViewById(R.id.btnSelect)
-        btnSelCancel = findViewById(R.id.btnSelCancel)
-        btnGridUndo = findViewById(R.id.btnGridUndo)
-        selBar = findViewById(R.id.selBar)
-        btnTrashSelected = findViewById(R.id.btnTrashSelected)
+        trashScreen = findViewById(R.id.trashScreen)
+        settingsScreen = findViewById(R.id.settingsScreen)
 
-        columns = getPreferences(MODE_PRIVATE).getInt("columns", 4)
-        grid.numColumns = columns
-        grid.adapter = gridAdapter
-        grid.setOnItemClickListener { _, _, pos, _ ->
-            if (selectionMode) toggleSelect(pos) else openViewer(pos)
-        }
-        grid.setOnItemLongClickListener { _, _, pos, _ ->
-            if (!selectionMode) setSelectionMode(true)
-            toggleSelect(pos)
-            true
-        }
-        btnSelect.setOnClickListener {
-            if (!selectionMode) setSelectionMode(true) else toggleSelectAll()
-        }
-        btnSelCancel.setOnClickListener { setSelectionMode(false) }
-        btnTrashSelected.setOnClickListener { trashSelected() }
-        btnGridUndo.setOnClickListener { undo() }
+        setupGridScreen()
+        setupViewer()
         setupTrashScreen()
+        setupSettingsScreen()
 
-        tabAll = findViewById(R.id.tabAll)
-        tabFav = findViewById(R.id.tabFav)
-        btnFav = findViewById(R.id.btnFav)
-        tabAll.setOnClickListener { setFavOnly(false) }
-        tabFav.setOnClickListener { setFavOnly(true) }
-        btnFav.setOnClickListener { toggleFavorite() }
-        findViewById<View>(R.id.btnSettings).setOnClickListener { showSettings() }
-        photoView.keepZoomAcrossPhotos = prefs.getBoolean(PREF_KEEP_ZOOM, true)
-        updateTabs()
-        setupGridPinch()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (!handleBack()) {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        })
 
-        strip = findViewById(R.id.strip)
-        stripLayout = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        strip.layoutManager = stripLayout
-        strip.adapter = stripAdapter
-        strip.itemAnimator = null
-        btnBack.setOnClickListener { showGrid() }
-        gridBanner.setOnClickListener { requestManageMedia() }
-
-        btnTrash.setOnClickListener { trashCurrent() }
-        btnKeep.setOnClickListener { move(+1) }
-        btnPrev.setOnClickListener { move(-1) }
-        btnUndo.setOnClickListener { undo() }
-        manageBanner.setOnClickListener { requestManageMedia() }
-
-        setupSwipe()
-
-        if (hasReadPermission()) loadPhotos() else requestReadPermission()
+        loadBlurCache()
+        showScreen(Screen.GRID)
+        if (hasReadPermission()) loadAll() else requestReadPermission()
     }
 
     override fun onResume() {
         super.onResume()
         updateManageBanner()
-        if (!loaded && hasReadPermission()) loadPhotos()
-        if (hasReadPermission() && !askedManageThisSession) {
-            askedManageThisSession = true
+        if (screen == Screen.SETTINGS) updateSettingsUi()
+        if (!loaded && hasReadPermission()) loadAll()
+        if (hasReadPermission() && !askedManage) {
+            askedManage = true
             if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) showManageMediaDialog(null)
         }
-    }
-
-    /** 확인창 없이 바로 지우려면 '미디어 관리' 권한이 필요하다고 안내. */
-    private fun showManageMediaDialog(onSkip: (() -> Unit)?) {
-        val b = AlertDialog.Builder(this)
-            .setTitle("버튼 한 번에 바로 삭제")
-            .setMessage(
-                "휴지통 버튼을 누를 때마다 뜨는 확인창을 없애려면\n" +
-                    "'미디어 관리' 권한을 켜주세요.\n\n" +
-                    "다음 화면에서 '사진 정리'의 스위치를 켜고 돌아오면 됩니다."
-            )
-            .setPositiveButton("권한 켜기") { _, _ -> requestManageMedia() }
-        if (onSkip != null) b.setNegativeButton("이번만 그냥 삭제") { _, _ -> onSkip() }
-        else b.setNegativeButton("나중에", null)
-        b.show()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         io.shutdownNow()
         thumbIo.shutdownNow()
+        blurIo.shutdownNow()
     }
 
-    // ---------------------------------------------------------------- 권한
+    private fun showScreen(s: Screen) {
+        screen = s
+        gridScreen.visibility = if (s == Screen.GRID) View.VISIBLE else View.GONE
+        viewerScreen.visibility = if (s == Screen.VIEWER) View.VISIBLE else View.GONE
+        trashScreen.visibility = if (s == Screen.TRASH) View.VISIBLE else View.GONE
+        settingsScreen.visibility = if (s == Screen.SETTINGS) View.VISIBLE else View.GONE
+    }
+
+    /** 뒤로가기 처리. false 면 앱 종료. */
+    private fun handleBack(): Boolean = when {
+        screen == Screen.VIEWER || screen == Screen.SETTINGS -> { showGrid(); true }
+        screen == Screen.TRASH -> { closeTrashScreen(); true }
+        selectionMode -> { setSelectionMode(false); true }
+        else -> false
+    }
+
+    // ============================================================ 권한
 
     private fun readPermissions(): Array<String> = when {
         Build.VERSION.SDK_INT >= 34 -> arrayOf(
@@ -258,39 +260,36 @@ class MainActivity : Activity() {
         else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
 
-    private fun granted(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
-
-    private fun hasReadPermission(): Boolean = readPermissions().any { granted(it) }
+    private fun hasReadPermission(): Boolean =
+        readPermissions().any { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
     private fun requestReadPermission() = requestPermissions(readPermissions(), REQ_READ)
 
+    @Deprecated("Activity API")
     override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, results: IntArray) {
+        @Suppress("DEPRECATION")
         super.onRequestPermissionsResult(code, perms, results)
         if (code != REQ_READ) return
         if (hasReadPermission()) {
-            loadPhotos()
+            loadAll()
         } else {
-            showGridMessage("사진 접근 권한이 필요해요.\n\n여기를 탭해서 다시 요청하거나\n설정 > 애플리케이션 > 사진 정리 > 권한에서 허용해 주세요.")
+            showGridMessage("사진 접근 권한이 필요해요\n\n여기를 탭해서 다시 요청하거나\n설정 > 애플리케이션 > 사진 정리 > 권한에서 허용해 주세요")
             gridEmpty.setOnClickListener {
-                if (shouldShowRequestPermissionRationale(readPermissions()[0])) {
-                    requestReadPermission()
-                } else {
-                    startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
-                    )
-                }
+                if (shouldShowRequestPermissionRationale(readPermissions()[0])) requestReadPermission()
+                else openAppSettings()
             }
         }
     }
 
-    /** '미디어 관리' 권한이 있으면 휴지통 이동 시 시스템 확인창이 뜨지 않는다. */
-    private fun canManageMedia(): Boolean =
-        Build.VERSION.SDK_INT >= 31 && MediaStore.canManageMedia(this)
+    private fun openAppSettings() {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    /** '미디어 관리' 권한이 있으면 휴지통·즐겨찾기 변경 시 시스템 확인창이 뜨지 않는다. */
+    private fun canManageMedia(): Boolean = Build.VERSION.SDK_INT >= 31 && MediaStore.canManageMedia(this)
 
     private fun updateManageBanner() {
-        val v = if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) View.VISIBLE else View.GONE
-        manageBanner.visibility = v
-        gridBanner.visibility = v
+        gridBanner.visibility = if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) View.VISIBLE else View.GONE
     }
 
     private fun requestManageMedia() {
@@ -298,93 +297,155 @@ class MainActivity : Activity() {
         try {
             startActivity(Intent(Settings.ACTION_REQUEST_MANAGE_MEDIA, Uri.parse("package:$packageName")))
         } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            openAppSettings()
         }
     }
 
-    // ---------------------------------------------------------------- 사진 목록
+    private fun showManageMediaDialog(onSkip: (() -> Unit)?) {
+        val b = MaterialAlertDialogBuilder(this)
+            .setTitle("버튼 한 번에 바로 삭제")
+            .setMessage("휴지통 버튼을 누를 때마다 뜨는 확인창을 없애려면 '미디어 관리' 권한을 켜주세요.\n\n다음 화면에서 '사진 정리'의 스위치를 켜고 돌아오면 돼요.")
+            .setPositiveButton("권한 켜기") { _, _ -> requestManageMedia() }
+        if (onSkip != null) b.setNegativeButton("이번만 그냥 삭제") { _, _ -> onSkip() }
+        else b.setNegativeButton("나중에", null)
+        b.show()
+    }
 
-    private fun loadPhotos() {
+    // ============================================================ 사진 불러오기
+
+    private fun loadAll() {
         loaded = true
-        emptyText.setOnClickListener(null)
         gridEmpty.setOnClickListener(null)
-        gridLoading.visibility = View.VISIBLE
-        val favFilter = favOnly
+        if (allPhotos.isEmpty()) gridLoading.visibility = View.VISIBLE
         io.execute {
-            val list = queryPhotos(favoritesOnly = favFilter)
+            val list = MediaRepo.query(contentResolver)
             main.post {
-                if (favFilter != favOnly) return@post // 그 사이 탭이 바뀜
-                photos.clear()
-                photos.addAll(list)
-                index = 0
+                val keep = photos.getOrNull(index)?.id
+                allPhotos.clear()
+                allPhotos.addAll(list)
+                folders = PhotoLogic.groupFolders(allPhotos)
+                if (bucketFilter != null && folders.none { it.bucketId == bucketFilter }) bucketFilter = null
                 gridLoading.visibility = View.GONE
-                showGrid()
+                applyFilters(keep)
+                refresh()
+                checkResume()
+                if (viewMode == ViewMode.BLURRY) ensureBlurScan()
             }
         }
     }
 
-    /** trashedOnly = true 면 휴지통에 있는 사진만, 최근에 지운 순서로. */
-    private fun queryPhotos(trashedOnly: Boolean = false, favoritesOnly: Boolean = false): List<Photo> {
-        val result = ArrayList<Photo>()
-        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME,
-            MediaStore.Images.Media.DATE_TAKEN,
-            MediaStore.Images.Media.DATE_ADDED,
-            MediaStore.Images.Media.SIZE,
-            MediaStore.MediaColumns.DATE_EXPIRES,
-            MediaStore.MediaColumns.IS_FAVORITE,
+    /** 보기 조건에 맞게 [photos] 다시 만들기. keepId 사진이 있으면 그 위치 유지. */
+    private fun applyFilters(keepId: Long?) {
+        val list = PhotoLogic.applyFilter(
+            allPhotos, viewMode, bucketFilter, blurScores,
+            PhotoLogic.blurThreshold(settings.blurSensitivity),
         )
-        val sort = if (trashedOnly) {
-            // 휴지통 기한 = 지운 시각 + 30일 → 기한이 늦을수록 최근에 지운 것
-            "${MediaStore.MediaColumns.DATE_EXPIRES} DESC"
-        } else {
-            "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC"
-        }
-        val args = Bundle().apply {
-            putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sort)
-            if (trashedOnly) putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
-            if (favoritesOnly) {
-                putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, "${MediaStore.MediaColumns.IS_FAVORITE} = 1")
-            }
-        }
-        val cursor = try {
-            contentResolver.query(collection, projection, args, null)
-        } catch (e: Exception) {
-            null
-        }
-        cursor?.use { c ->
-            val expCol = c.getColumnIndex(MediaStore.MediaColumns.DATE_EXPIRES)
-            val favCol = c.getColumnIndex(MediaStore.MediaColumns.IS_FAVORITE)
-            val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
-            val takenCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-            val addedCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
-            val sizeCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
-            while (c.moveToNext()) {
-                val id = c.getLong(idCol)
-                val taken = c.getLong(takenCol)
-                val date = if (taken > 0) taken else c.getLong(addedCol) * 1000
-                result.add(
-                    Photo(
-                        id = id,
-                        uri = ContentUris.withAppendedId(collection, id),
-                        name = c.getString(nameCol) ?: "",
-                        dateMillis = date,
-                        size = c.getLong(sizeCol),
-                        expiresMillis = if (expCol >= 0) c.getLong(expCol) * 1000 else 0,
-                        favorite = favCol >= 0 && c.getInt(favCol) == 1,
-                    )
-                )
-            }
-        }
-        return result
+        photos.clear()
+        photos.addAll(list)
+        val keepPos = keepId?.let { id -> photos.indexOfFirst { it.id == id } } ?: -1
+        index = if (keepPos >= 0) keepPos else index.coerceIn(0, (photos.size - 1).coerceAtLeast(0))
+        val ids = photos.mapTo(HashSet()) { it.id }
+        selected.retainAll(ids)
+        rebuildRows()
     }
 
-    // ---------------------------------------------------------------- 화면 표시
+    private fun rebuildRows() {
+        rows = PhotoLogic.buildRows(photos, withHeaders = viewMode != ViewMode.BLURRY)
+        photoToRow = IntArray(photos.size)
+        rows.forEachIndexed { r, row -> if (row is GridRow.Item) photoToRow[row.photoIndex] = r }
+        gridAdapter.notifyDataSetChanged()
+    }
 
-    // ---------------------------------------------------------------- 전체 보기(그리드)
+    /** 지금 보이는 화면 새로 그리기 */
+    private fun refresh() {
+        when (screen) {
+            Screen.VIEWER -> show()
+            Screen.GRID -> updateGridHeader()
+            else -> Unit
+        }
+    }
+
+    // ============================================================ 전체 보기
+
+    private fun setupGridScreen() {
+        headerNormal = findViewById(R.id.headerNormal)
+        headerSelect = findViewById(R.id.headerSelect)
+        gridTitle = findViewById(R.id.gridTitle)
+        gridCount = findViewById(R.id.gridCount)
+        selTitle = findViewById(R.id.selTitle)
+        btnGridUndo = findViewById(R.id.btnGridUndo)
+        btnSelect = findViewById(R.id.btnSelect)
+        btnSelectAll = findViewById(R.id.btnSelectAll)
+        chipFolder = findViewById(R.id.chipFolder)
+        chipGroupMode = findViewById(R.id.chipGroupMode)
+        gridBanner = findViewById(R.id.gridBanner)
+        blurProgressBox = findViewById(R.id.blurProgressBox)
+        blurProgressText = findViewById(R.id.blurProgressText)
+        blurProgress = findViewById(R.id.blurProgress)
+        grid = findViewById(R.id.grid)
+        fastScroller = findViewById(R.id.fastScroller)
+        gridEmpty = findViewById(R.id.gridEmpty)
+        gridLoading = findViewById(R.id.gridLoading)
+        btnResume = findViewById(R.id.btnResume)
+        selBar = findViewById(R.id.selBar)
+        btnTrashSelected = findViewById(R.id.btnTrashSelected)
+
+        gridLayout = GridLayoutManager(this, settings.columns)
+        gridLayout.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int) =
+                if (rows.getOrNull(position) is GridRow.Header) gridLayout.spanCount else 1
+        }
+        grid.layoutManager = gridLayout
+        grid.adapter = gridAdapter
+        grid.itemAnimator = null
+        grid.setHasFixedSize(true)
+        fastScroller.attach(grid)
+        fastScroller.labelFor = { pos -> labelForRow(pos) }
+        grid.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(r: RecyclerView, dx: Int, dy: Int) {
+                if (dy > 8) btnResume.shrink() else if (dy < -8) btnResume.extend()
+            }
+        })
+        setupGridPinch()
+
+        btnSelect.setOnClickListener { setSelectionMode(true) }
+        findViewById<View>(R.id.btnSelCancel).setOnClickListener { setSelectionMode(false) }
+        btnSelectAll.setOnClickListener {
+            if (selected.size == photos.size) selected.clear() else photos.forEach { selected.add(it.id) }
+            gridAdapter.notifyDataSetChanged()
+            updateGridHeader()
+        }
+        btnTrashSelected.setOnClickListener { trashSelected() }
+        btnGridUndo.setOnClickListener { undo() }
+        findViewById<View>(R.id.btnOpenTrash).setOnClickListener { openTrashScreen() }
+        findViewById<View>(R.id.btnSettings).setOnClickListener { openSettings() }
+        findViewById<View>(R.id.bannerOn).setOnClickListener { requestManageMedia() }
+        chipFolder.setOnClickListener { showFolderPicker() }
+        chipFolder.setOnCloseIconClickListener { showFolderPicker() }
+        chipGroupMode.setOnCheckedStateChangeListener { _, ids ->
+            setViewMode(
+                when (ids.firstOrNull()) {
+                    R.id.chipFav -> ViewMode.FAVORITES
+                    R.id.chipBlur -> ViewMode.BLURRY
+                    else -> ViewMode.ALL
+                }
+            )
+        }
+        btnResume.setOnClickListener {
+            val pos = photos.indexOfFirst { it.id == settings.lastPhotoId }
+            btnResume.visibility = View.GONE
+            if (pos >= 0) openViewer(pos)
+        }
+    }
+
+    private fun labelForRow(pos: Int): String {
+        if (viewMode == ViewMode.BLURRY) return ""
+        return when (val row = rows.getOrNull(pos)) {
+            is GridRow.Header -> row.label
+            is GridRow.Item -> PhotoLogic.monthLabelOf(photos[row.photoIndex].dateMillis)
+            null -> ""
+        }
+    }
 
     private fun showGridMessage(msg: String) {
         gridEmpty.text = msg
@@ -392,64 +453,161 @@ class MainActivity : Activity() {
     }
 
     private fun showGrid() {
-        viewerScreen.visibility = View.GONE
-        gridScreen.visibility = View.VISIBLE
+        showScreen(Screen.GRID)
+        gridAdapter.notifyDataSetChanged()
         updateGridHeader()
-        if (photos.isEmpty()) {
-            showGridMessage(
-                if (favOnly) "즐겨찾기한 사진이 없어요\n\n사진을 크게 연 뒤 위쪽 ♡ 를 누르면\n즐겨찾기에 추가돼요"
-                else "정리할 사진이 없어요 🎉"
-            )
-        } else gridEmpty.visibility = View.GONE
         if (photos.isNotEmpty()) {
-            val pos = index.coerceIn(0, photos.size - 1)
-            if (pos < grid.firstVisiblePosition || pos > grid.lastVisiblePosition) grid.setSelection(pos)
+            val r = photoToRow.getOrElse(index.coerceIn(0, photos.size - 1)) { 0 }
+            val first = gridLayout.findFirstVisibleItemPosition()
+            val last = gridLayout.findLastVisibleItemPosition()
+            if (r < first || r > last) gridLayout.scrollToPositionWithOffset(r, grid.height / 3)
         }
     }
 
     private fun updateGridHeader() {
-        gridAdapter.notifyDataSetChanged()
-        val undoOn = undoStack.isNotEmpty() && !busy
-        btnGridUndo.isEnabled = undoOn
-        btnGridUndo.visibility = if (undoStack.isNotEmpty() && !selectionMode) View.VISIBLE else View.GONE
-        if (selectionMode) {
-            gridTitle.text = "${selected.size}장 선택"
-            gridCount.text = "탭해서 고르기 · 길게 눌러도 선택"
-            btnSelect.text = if (selected.size == photos.size && photos.isNotEmpty()) "전체 해제" else "전체"
-            btnSelCancel.visibility = View.VISIBLE
-            selBar.visibility = View.VISIBLE
-            btnTrashSelected.text = if (selected.isEmpty()) "사진을 골라주세요" else "🗑 ${selected.size}장 휴지통으로"
-            btnTrashSelected.isEnabled = selected.isNotEmpty() && !busy
-            btnTrashSelected.alpha = if (btnTrashSelected.isEnabled) 1f else 0.4f
-        } else {
-            gridTitle.text = if (favOnly) "♥ 즐겨찾기" else "사진 정리"
-            gridCount.text = buildString {
-                append("${photos.size}장")
-                if (trashedCount > 0) append("  ·  🗑 $trashedCount")
-                append("  ·  두 손가락으로 크기 조절")
-            }
-            btnSelect.text = "선택"
-            btnSelCancel.visibility = View.GONE
-            selBar.visibility = View.GONE
+        headerNormal.visibility = if (selectionMode) View.GONE else View.VISIBLE
+        headerSelect.visibility = if (selectionMode) View.VISIBLE else View.GONE
+        selBar.visibility = if (selectionMode) View.VISIBLE else View.GONE
+        btnGridUndo.visibility = if (undoStack.isNotEmpty()) View.VISIBLE else View.GONE
+        btnGridUndo.isEnabled = !busy
+
+        gridTitle.text = when (viewMode) {
+            ViewMode.ALL -> "사진 정리"
+            ViewMode.FAVORITES -> "즐겨찾기"
+            ViewMode.BLURRY -> "흐린 사진"
+        }
+        val folder = folders.firstOrNull { it.bucketId == bucketFilter }
+        gridCount.text = buildString {
+            if (folder != null) append(folder.name).append(" · ")
+            append("%,d장".format(photos.size))
+            if (trashedCount > 0) append(" · 오늘 %,d장 정리".format(trashedCount))
+        }
+        chipFolder.text = folder?.name ?: "모든 폴더"
+
+        selTitle.text = if (selected.isEmpty()) "사진 선택" else "%,d장 선택".format(selected.size)
+        btnSelectAll.text = if (photos.isNotEmpty() && selected.size == photos.size) "선택 해제" else "전체 선택"
+        btnTrashSelected.text = if (selected.isEmpty()) "사진을 골라주세요" else "%,d장 휴지통으로".format(selected.size)
+        btnTrashSelected.isEnabled = selected.isNotEmpty() && !busy
+
+        if (photos.isEmpty() && loaded && gridLoading.visibility != View.VISIBLE) {
+            showGridMessage(
+                when (viewMode) {
+                    ViewMode.FAVORITES -> "즐겨찾기한 사진이 없어요\n\n사진을 크게 연 뒤 위쪽 ♡ 를 누르면\n즐겨찾기에 추가돼요"
+                    ViewMode.BLURRY -> if (blurScanning) "흐린 사진을 찾고 있어요…" else "흐린 사진이 없어요 👍\n\n설정에서 민감도를 높이면 더 찾아봐요"
+                    ViewMode.ALL -> "정리할 사진이 없어요 🎉"
+                }
+            )
+        } else if (photos.isNotEmpty()) {
+            gridEmpty.visibility = View.GONE
         }
     }
 
     private fun setSelectionMode(on: Boolean) {
         selectionMode = on
         if (!on) selected.clear()
+        if (on) btnResume.visibility = View.GONE
+        gridAdapter.notifyDataSetChanged()
         updateGridHeader()
     }
 
-    private fun toggleSelect(pos: Int) {
-        val id = photos.getOrNull(pos)?.id ?: return
-        if (!selected.remove(id)) selected.add(id)
+    private fun toggleSelect(photoIndex: Int) {
+        val p = photos.getOrNull(photoIndex) ?: return
+        if (!selected.remove(p.id)) selected.add(p.id)
+        gridAdapter.notifyItemChanged(photoToRow[photoIndex])
         updateGridHeader()
     }
 
-    private fun toggleSelectAll() {
-        if (selected.size == photos.size) selected.clear()
-        else photos.forEach { selected.add(it.id) }
+    private fun setViewMode(m: ViewMode) {
+        if (m == viewMode) return
+        if (selectionMode) setSelectionMode(false)
+        viewMode = m
+        btnResume.visibility = View.GONE
+        applyFilters(null)
+        index = 0
+        grid.scrollToPosition(0)
+        blurProgressBox.visibility = View.GONE
+        if (m == ViewMode.BLURRY) ensureBlurScan()
         updateGridHeader()
+    }
+
+    private fun setFolder(bucketId: String?) {
+        if (bucketId == bucketFilter) return
+        if (selectionMode) setSelectionMode(false)
+        bucketFilter = bucketId
+        btnResume.visibility = View.GONE
+        applyFilters(null)
+        index = 0
+        grid.scrollToPosition(0)
+        updateGridHeader()
+    }
+
+    /** 폴더 고르기 시트 */
+    private fun showFolderPicker() {
+        val sheet = BottomSheetDialog(this)
+        val dp = resources.displayMetrics.density
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, (8 * dp).toInt(), 0, (24 * dp).toInt())
+        }
+        list.addView(TextView(this).apply {
+            text = "폴더"
+            textSize = 20f
+            setTextColor(ContextCompat.getColor(context, R.color.text))
+            paint.isFakeBoldText = true
+            setPadding((24 * dp).toInt(), (8 * dp).toInt(), (24 * dp).toInt(), (12 * dp).toInt())
+        })
+        val rippleRes = android.util.TypedValue().also {
+            theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true)
+        }.resourceId
+        fun addRow(bucketId: String?, name: String, count: Int, cover: Photo?) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding((20 * dp).toInt(), (8 * dp).toInt(), (20 * dp).toInt(), (8 * dp).toInt())
+                isClickable = true
+                isFocusable = true
+                setBackgroundResource(rippleRes)
+                setOnClickListener { sheet.dismiss(); setFolder(bucketId) }
+            }
+            val thumb = ShapeableImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(ContextCompat.getColor(context, R.color.surface3))
+                shapeAppearanceModel = ShapeAppearanceModel.builder().setAllCornerSizes(12 * dp).build()
+                if (cover == null) {
+                    setImageResource(R.drawable.ic_folder)
+                    imageTintList = ColorStateList.valueOf(ContextCompat.getColor(context, R.color.primary))
+                    scaleType = ImageView.ScaleType.CENTER
+                } else {
+                    loadThumb(this, cover)
+                }
+            }
+            row.addView(thumb, LinearLayout.LayoutParams((52 * dp).toInt(), (52 * dp).toInt()))
+            val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            texts.addView(TextView(this).apply {
+                text = name
+                textSize = 16f
+                setTextColor(ContextCompat.getColor(context, R.color.text))
+            })
+            texts.addView(TextView(this).apply {
+                text = "%,d장".format(count)
+                textSize = 13f
+                setTextColor(ContextCompat.getColor(context, R.color.text2))
+            })
+            row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = (16 * dp).toInt()
+            })
+            if (bucketId == bucketFilter) {
+                row.addView(ImageView(this).apply {
+                    setImageResource(R.drawable.ic_check)
+                    imageTintList = ColorStateList.valueOf(ContextCompat.getColor(context, R.color.primary))
+                }, LinearLayout.LayoutParams((24 * dp).toInt(), (24 * dp).toInt()))
+            }
+            list.addView(row)
+        }
+        addRow(null, "모든 폴더", allPhotos.size, null)
+        folders.forEach { addRow(it.bucketId, it.name, it.count, it.cover) }
+        sheet.setContentView(NestedScrollView(this).apply { addView(list) })
+        sheet.show()
     }
 
     /** 전체 보기에서 두 손가락으로 벌리면 크게(칸 수 ↓), 오므리면 작게(칸 수 ↑). */
@@ -460,68 +618,85 @@ class MainActivity : Activity() {
             override fun onScale(d: ScaleGestureDetector): Boolean {
                 acc *= d.scaleFactor
                 val next = when {
-                    acc > 1.25f -> columns - 1
-                    acc < 0.8f -> columns + 1
+                    acc > 1.25f -> gridLayout.spanCount - 1
+                    acc < 0.8f -> gridLayout.spanCount + 1
                     else -> return true
                 }.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
                 acc = 1f
-                if (next != columns) {
-                    val first = grid.firstVisiblePosition
-                    columns = next
-                    grid.numColumns = columns
-                    grid.setSelection(first)
-                    getPreferences(MODE_PRIVATE).edit().putInt("columns", columns).apply()
+                if (next != gridLayout.spanCount) {
+                    val first = gridLayout.findFirstVisibleItemPosition()
+                    gridLayout.spanCount = next
+                    settings.columns = next
+                    if (first >= 0) gridLayout.scrollToPositionWithOffset(first, 0)
                 }
                 return true
             }
         })
-        var pinching = false
-        grid.setOnTouchListener { _, ev ->
-            detector.onTouchEvent(ev)
-            if (ev.actionMasked == MotionEvent.ACTION_DOWN) pinching = false
-            if (!pinching && ev.pointerCount > 1) {
-                // 두 손가락이 닿는 순간 그리드의 스크롤/탭 처리를 취소
-                pinching = true
-                val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
-                grid.onTouchEvent(cancel)
-                cancel.recycle()
+        grid.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                detector.onTouchEvent(e)
+                // 두 손가락이 닿으면 목록 스크롤/탭 대신 크기 조절
+                return e.pointerCount > 1
             }
-            // 핀치 중엔 손을 뗄 때까지 이벤트를 그리드에 넘기지 않음 (사진이 눌리지 않게)
-            pinching
+
+            override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+                detector.onTouchEvent(e)
+            }
+        })
+    }
+
+    private class HeaderHolder(v: View) : RecyclerView.ViewHolder(v) {
+        val title: TextView = v.findViewById(R.id.headerTitle)
+        val count: TextView = v.findViewById(R.id.headerCount)
+    }
+
+    private class CellHolder(val cell: GridCell) : RecyclerView.ViewHolder(cell)
+
+    private inner class PhotoGridAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemCount() = rows.size
+        override fun getItemViewType(position: Int) = if (rows[position] is GridRow.Header) 0 else 1
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            if (viewType == 0) {
+                return HeaderHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_month_header, parent, false))
+            }
+            val cell = GridCell(parent.context)
+            val gap = (1 * parent.resources.displayMetrics.density).toInt()
+            cell.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { setMargins(gap, gap, gap, gap) }
+            val h = CellHolder(cell)
+            cell.setOnClickListener {
+                val pi = photoIndexAt(h.bindingAdapterPosition) ?: return@setOnClickListener
+                if (selectionMode) toggleSelect(pi) else openViewer(pi)
+            }
+            cell.setOnLongClickListener {
+                val pi = photoIndexAt(h.bindingAdapterPosition) ?: return@setOnLongClickListener false
+                if (!selectionMode) setSelectionMode(true)
+                toggleSelect(pi)
+                true
+            }
+            return h
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            when (val row = rows[position]) {
+                is GridRow.Header -> (holder as HeaderHolder).apply {
+                    title.text = row.label
+                    count.text = "%,d장".format(row.count)
+                }
+                is GridRow.Item -> (holder as CellHolder).cell.apply {
+                    val p = photos[row.photoIndex]
+                    setSelectionState(selectionMode, p.id in selected)
+                    setFavorite(p.favorite)
+                    setLabel(null)
+                    loadThumb(image, p)
+                }
+            }
         }
     }
 
-    private fun openViewer(pos: Int) {
-        if (pos !in photos.indices) return
-        index = pos
-        gridScreen.visibility = View.GONE
-        viewerScreen.visibility = View.VISIBLE
-        show()
-    }
-
-    @Deprecated("Activity API")
-    override fun onBackPressed() {
-        if (viewerScreen.visibility == View.VISIBLE) showGrid()
-        else if (trashScreen.visibility == View.VISIBLE) closeTrashScreen()
-        else if (selectionMode) setSelectionMode(false)
-        else @Suppress("DEPRECATION") super.onBackPressed()
-    }
-
-    private inner class GridAdapter : BaseAdapter() {
-        override fun getCount() = photos.size
-        override fun getItem(position: Int) = photos[position]
-        override fun getItemId(position: Int) = photos[position].id
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val cell = (convertView as? GridCell) ?: GridCell(this@MainActivity)
-            val p = photos[position]
-            cell.setSelectionState(selectionMode, p.id in selected)
-            cell.setLabel(null)
-            cell.setFavorite(p.favorite)
-            loadThumb(cell.image, p)
-            return cell
-        }
-    }
+    private fun photoIndexAt(adapterPos: Int): Int? =
+        (rows.getOrNull(adapterPos) as? GridRow.Item)?.photoIndex
 
     /** 썸네일을 비동기로 불러와 iv 에 넣는다 (스크롤로 재사용된 칸이면 버림). */
     private fun loadThumb(iv: ImageView, p: Photo) {
@@ -544,376 +719,149 @@ class MainActivity : Activity() {
         }
     }
 
-    // ---------------------------------------------------------------- 즐겨찾기
+    // ============================================================ 이어서 보기
 
-    private fun updateTabs() {
-        tabAll.alpha = if (favOnly) 0.45f else 1f
-        tabFav.alpha = if (favOnly) 1f else 0.45f
-        tabAll.setTypeface(null, if (favOnly) android.graphics.Typeface.NORMAL else android.graphics.Typeface.BOLD)
-        tabFav.setTypeface(null, if (favOnly) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+    /** 처음 불러온 뒤 한 번: 마지막으로 보던 사진 위치로 이동하고 '이어서 보기' 버튼 표시 */
+    private fun checkResume() {
+        if (resumeChecked) return
+        resumeChecked = true
+        if (!settings.resume) return
+        val pos = photos.indexOfFirst { it.id == settings.lastPhotoId }
+        if (pos < 0) return
+        index = pos
+        grid.post { gridLayout.scrollToPositionWithOffset(photoToRow[pos], grid.height / 3) }
+        btnResume.visibility = View.VISIBLE
+        btnResume.extend()
     }
 
-    /** 전체 ↔ 즐겨찾기만 보기 전환 */
-    private fun setFavOnly(on: Boolean) {
-        if (favOnly == on || busy) return
-        if (selectionMode) setSelectionMode(false)
-        favOnly = on
-        // 목록이 바뀌므로 '되돌리기' 위치 기록은 맞지 않음 (지운 사진은 휴지통 화면에서 복원 가능)
-        undoStack.clear()
-        updateTabs()
-        // 새 목록이 올 때까지 이전 목록이 보이지 않게 비우고 제목은 바로 바꾼다
-        photos.clear()
-        index = 0
-        updateGridHeader()
-        if (hasReadPermission()) loadPhotos()
-    }
+    // ============================================================ 한 장씩 보기
 
-    /** 지금 보는 사진의 하트 켜기/끄기 */
-    private fun toggleFavorite() {
-        if (photos.isEmpty() || busy) return
-        val p = photos[index]
-        val value = !p.favorite
-        pendingFav = p to value
-        busy = true
-        try {
-            // '미디어 관리' 권한이 있으면 확인창 없이 바로 처리된다
-            val pi = MediaStore.createFavoriteRequest(contentResolver, listOf(p.uri), value)
-            startIntentSenderForResult(pi.intentSender, REQ_FAVORITE, null, 0, 0, 0)
-        } catch (e: Exception) {
-            busy = false
-            pendingFav = null
-            Toast.makeText(this, "즐겨찾기를 바꾸지 못했어요: ${e.message}", Toast.LENGTH_SHORT).show()
+    private fun setupViewer() {
+        photoView = findViewById(R.id.photo)
+        loading = findViewById(R.id.loading)
+        emptyText = findViewById(R.id.empty)
+        viewerTop = findViewById(R.id.viewerTop)
+        viewerBottom = findViewById(R.id.viewerBottom)
+        counterText = findViewById(R.id.counter)
+        infoText = findViewById(R.id.info)
+        zoomPill = findViewById(R.id.zoomPill)
+        hintText = findViewById(R.id.hint)
+        btnFav = findViewById(R.id.btnFav)
+        btnUndo = findViewById(R.id.btnUndo)
+        btnPrev = findViewById(R.id.btnPrev)
+        btnTrash = findViewById(R.id.btnTrash)
+        btnKeep = findViewById(R.id.btnKeep)
+        strip = findViewById(R.id.strip)
+
+        findViewById<View>(R.id.btnBack).setOnClickListener { showGrid() }
+        btnTrash.setOnClickListener { trashCurrent() }
+        btnKeep.setOnClickListener { move(+1) }
+        btnPrev.setOnClickListener { move(-1) }
+        btnUndo.setOnClickListener { undo() }
+        btnFav.setOnClickListener { toggleFavorite() }
+
+        stripLayout = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        strip.layoutManager = stripLayout
+        strip.adapter = stripAdapter
+        strip.itemAnimator = null
+
+        photoView.keepZoomAcrossPhotos = settings.keepZoom
+        photoView.onZoomChanged = { zoomed ->
+            zoomPill.visibility = if (zoomed && settings.keepZoom) View.VISIBLE else View.GONE
         }
-    }
-
-    private fun onFavoriteResult(ok: Boolean) {
-        busy = false
-        val (p, value) = pendingFav ?: return
-        pendingFav = null
-        if (ok) {
-            val pos = photos.indexOfFirst { it.id == p.id }
-            // 즐겨찾기 화면에서 하트를 꺼도 바로 사라지지 않게 목록에는 남겨둔다 (탭을 다시 누르면 정리됨)
-            if (pos >= 0) photos[pos] = photos[pos].copy(favorite = value)
-            Toast.makeText(this, if (value) "♥ 즐겨찾기에 추가했어요" else "즐겨찾기에서 뺐어요", Toast.LENGTH_SHORT).show()
-        }
-        refresh()
-    }
-
-    // ---------------------------------------------------------------- 설정
-
-    private fun showSettings() {
-        val labels = arrayOf("확대 유지: 다음 사진에서도 같은 부분을 확대해서 보기")
-        val checked = booleanArrayOf(photoView.keepZoomAcrossPhotos)
-        AlertDialog.Builder(this)
-            .setTitle("설정")
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
-            .setPositiveButton("확인") { _, _ ->
-                photoView.keepZoomAcrossPhotos = checked[0]
-                prefs.edit().putBoolean(PREF_KEEP_ZOOM, checked[0]).apply()
-                Toast.makeText(
-                    this,
-                    if (checked[0]) "확대 유지를 켰어요" else "확대 유지를 껐어요",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-            .setNegativeButton("취소", null)
-            .show()
-    }
-
-    // ---------------------------------------------------------------- 휴지통 화면
-
-    private fun setupTrashScreen() {
-        trashScreen = findViewById(R.id.trashScreen)
-        trashGrid = findViewById(R.id.trashGrid)
-        trashTitle = findViewById(R.id.trashTitle)
-        trashEmpty = findViewById(R.id.trashEmpty)
-        trashLoading = findViewById(R.id.trashLoading)
-        btnTrashSelectAll = findViewById(R.id.btnTrashSelectAll)
-        btnRestoreSelected = findViewById(R.id.btnRestoreSelected)
-        btnDeleteForever = findViewById(R.id.btnDeleteForever)
-
-        trashGrid.adapter = trashAdapter
-        trashGrid.setOnItemClickListener { _, _, pos, _ ->
-            val id = trashed.getOrNull(pos)?.id ?: return@setOnItemClickListener
-            if (!trashSelected.remove(id)) trashSelected.add(id)
-            updateTrashHeader()
-        }
-        findViewById<View>(R.id.btnOpenTrash).setOnClickListener { openTrashScreen() }
-        findViewById<View>(R.id.btnTrashBack).setOnClickListener { closeTrashScreen() }
-        btnTrashSelectAll.setOnClickListener {
-            if (trashSelected.size == trashed.size) trashSelected.clear()
-            else trashed.forEach { trashSelected.add(it.id) }
-            updateTrashHeader()
-        }
-        btnRestoreSelected.setOnClickListener { restoreFromBin() }
-        btnDeleteForever.setOnClickListener { confirmDeleteForever() }
-    }
-
-    private fun openTrashScreen() {
-        if (selectionMode) setSelectionMode(false)
-        gridScreen.visibility = View.GONE
-        trashScreen.visibility = View.VISIBLE
-        trashGrid.numColumns = columns
-        loadTrash()
-    }
-
-    private fun closeTrashScreen() {
-        trashScreen.visibility = View.GONE
-        trashSelected.clear()
-        showGrid()
-    }
-
-    private fun loadTrash() {
-        trashLoading.visibility = View.VISIBLE
-        trashEmpty.visibility = View.GONE
-        io.execute {
-            val list = if (hasReadPermission()) queryPhotos(trashedOnly = true) else emptyList()
-            main.post {
-                trashed.clear()
-                trashed.addAll(list)
-                trashSelected.retainAll(list.map { it.id }.toSet())
-                trashLoading.visibility = View.GONE
-                updateTrashHeader()
+        photoView.onSingleTap = { setChromeVisible(!chromeVisible) }
+        photoView.onSwipe = { dx, dy ->
+            val min = 60 * resources.displayMetrics.density
+            when {
+                abs(dx) > abs(dy) && abs(dx) > min -> {
+                    val next = (dx < 0) != settings.swipeReverse
+                    move(if (next) +1 else -1)
+                }
+                dy < -min && abs(dy) > abs(dx) -> doSwipeAction(settings.swipeUp)
+                dy > min && abs(dy) > abs(dx) -> doSwipeAction(settings.swipeDown)
             }
         }
+        updateHint()
     }
 
-    private fun updateTrashHeader() {
-        trashAdapter.notifyDataSetChanged()
-        trashEmpty.visibility = if (trashed.isEmpty()) View.VISIBLE else View.GONE
-        trashTitle.text = when {
-            trashSelected.isNotEmpty() -> "${trashSelected.size}장 선택"
-            else -> "휴지통 ${trashed.size}장"
+    private fun doSwipeAction(a: SwipeAction) {
+        when (a) {
+            SwipeAction.TRASH -> trashCurrent()
+            SwipeAction.FAVORITE -> toggleFavorite()
+            SwipeAction.GRID -> showGrid()
+            SwipeAction.NONE -> Unit
         }
-        btnTrashSelectAll.text = if (trashed.isNotEmpty() && trashSelected.size == trashed.size) "전체 해제" else "전체"
-        btnTrashSelectAll.isEnabled = trashed.isNotEmpty()
-        val on = trashSelected.isNotEmpty() && !busy
-        btnRestoreSelected.isEnabled = on
-        btnDeleteForever.isEnabled = on
-        btnRestoreSelected.alpha = if (on) 1f else 0.4f
-        btnDeleteForever.alpha = if (on) 1f else 0.4f
-        btnRestoreSelected.text = if (trashSelected.isEmpty()) "↶ 복원" else "↶ ${trashSelected.size}장 복원"
-        btnDeleteForever.text = if (trashSelected.isEmpty()) "영구 삭제" else "${trashSelected.size}장 영구 삭제"
     }
 
-    /** 자동 영구 삭제까지 남은 날 */
-    private fun daysLeftLabel(p: Photo): String? {
-        if (p.expiresMillis <= 0) return null
-        val left = p.expiresMillis - System.currentTimeMillis()
-        if (left <= 0) return "곧 삭제"
-        val days = Math.ceil(left / 86_400_000.0).toInt()
-        return if (days <= 1) "1일 남음" else "${days}일 남음"
+    private fun updateHint() {
+        val left = if (settings.swipeReverse) "이전" else "다음"
+        val right = if (settings.swipeReverse) "다음" else "이전"
+        val parts = mutableListOf("← $left", "→ $right")
+        if (settings.swipeUp != SwipeAction.NONE) parts += "↑ ${settings.swipeUp.short}"
+        if (settings.swipeDown != SwipeAction.NONE) parts += "↓ ${settings.swipeDown.short}"
+        parts += "탭: 사진만 보기"
+        hintText.text = parts.joinToString("   ")
     }
 
-    private fun selectedInBin(): List<Photo> = trashed.filter { it.id in trashSelected }
-
-    private fun restoreFromBin() {
-        val list = selectedInBin()
-        if (list.isEmpty() || busy) return
-        startBinRequests(REQ_BIN_RESTORE, list)
-    }
-
-    private fun confirmDeleteForever() {
-        val list = selectedInBin()
-        if (list.isEmpty() || busy) return
-        AlertDialog.Builder(this)
-            .setTitle("${list.size}장을 영구 삭제할까요?")
-            .setMessage("영구 삭제한 사진은 되돌릴 수 없어요.")
-            .setPositiveButton("영구 삭제") { _, _ -> startBinRequests(REQ_BIN_DELETE, list) }
-            .setNegativeButton("취소", null)
-            .show()
-    }
-
-    private fun startBinRequests(code: Int, list: List<Photo>) {
-        binQueue.clear()
-        list.chunked(TRASH_CHUNK).forEach { binQueue.addLast(it) }
-        binRequestCode = code
-        binDone = 0
-        busy = true
-        updateTrashHeader()
-        nextBinRequest()
-    }
-
-    private fun nextBinRequest() {
-        val chunk = binQueue.firstOrNull()
-        if (chunk == null) {
-            finishBinRequests()
-            return
-        }
-        try {
-            val uris = chunk.map { it.uri }
-            val pi = if (binRequestCode == REQ_BIN_RESTORE) {
-                MediaStore.createTrashRequest(contentResolver, uris, false)
+    /** 위/아래 막대 보이기/숨기기 (사진만 크게 보기) */
+    private fun setChromeVisible(v: Boolean) {
+        chromeVisible = v
+        listOf(viewerTop, viewerBottom).forEach { bar ->
+            bar.animate().cancel()
+            if (v) {
+                bar.visibility = View.VISIBLE
+                bar.animate().alpha(1f).setDuration(180).start()
             } else {
-                MediaStore.createDeleteRequest(contentResolver, uris)
-            }
-            startIntentSenderForResult(pi.intentSender, binRequestCode, null, 0, 0, 0)
-        } catch (e: Exception) {
-            binQueue.clear()
-            Toast.makeText(this, "처리하지 못했어요: ${e.message}", Toast.LENGTH_SHORT).show()
-            finishBinRequests()
-        }
-    }
-
-    private fun onBinResult(ok: Boolean) {
-        val chunk = binQueue.removeFirstOrNull()
-        if (ok && chunk != null) {
-            binDone += chunk.size
-            nextBinRequest()
-        } else {
-            binQueue.clear()
-            finishBinRequests()
-        }
-    }
-
-    private fun finishBinRequests() {
-        busy = false
-        if (binDone > 0) {
-            val msg = if (binRequestCode == REQ_BIN_RESTORE) "${binDone}장 복원했어요" else "${binDone}장 영구 삭제했어요"
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            // 휴지통 밖에서 바뀐 것이므로 '되돌리기' 기록은 더 이상 맞지 않음
-            undoStack.clear()
-            trashSelected.clear()
-            if (binRequestCode == REQ_BIN_RESTORE) reloadPhotosKeepingState()
-        }
-        binDone = 0
-        loadTrash()
-    }
-
-    /** 복원된 사진이 전체 보기에 다시 보이도록 목록 새로 고침. */
-    private fun reloadPhotosKeepingState() {
-        val favFilter = favOnly
-        io.execute {
-            val list = queryPhotos(favoritesOnly = favFilter)
-            main.post {
-                if (favFilter != favOnly) return@post
-                val currentId = photos.getOrNull(index)?.id
-                photos.clear()
-                photos.addAll(list)
-                index = photos.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
-                gridAdapter.notifyDataSetChanged()
+                bar.animate().alpha(0f).setDuration(180).withEndAction { bar.visibility = View.GONE }.start()
             }
         }
     }
 
-    private inner class TrashAdapter : BaseAdapter() {
-        override fun getCount() = trashed.size
-        override fun getItem(position: Int) = trashed[position]
-        override fun getItemId(position: Int) = trashed[position].id
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val cell = (convertView as? GridCell) ?: GridCell(this@MainActivity)
-            val p = trashed[position]
-            cell.setSelectionState(true, p.id in trashSelected)
-            cell.setLabel(daysLeftLabel(p))
-            cell.setFavorite(false)
-            loadThumb(cell.image, p)
-            return cell
-        }
-    }
-
-    // ---------------------------------------------------------------- 썸네일 줄 (한 장 보기 화면)
-
-    private class StripHolder(val frame: android.widget.FrameLayout, val image: ImageView) :
-        RecyclerView.ViewHolder(frame)
-
-    private inner class StripAdapter : RecyclerView.Adapter<StripHolder>() {
-        private val dp by lazy { resources.displayMetrics.density }
-
-        override fun getItemCount() = photos.size
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StripHolder {
-            val size = (56 * dp).toInt()
-            val frame = android.widget.FrameLayout(this@MainActivity).apply {
-                layoutParams = RecyclerView.LayoutParams(size, size).apply {
-                    val m = (2 * dp).toInt()
-                    setMargins(m, 0, m, 0)
-                }
-                setPadding((3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt())
-            }
-            val iv = ImageView(this@MainActivity).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(0xFF222222.toInt())
-            }
-            frame.addView(iv, android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-            val h = StripHolder(frame, iv)
-            frame.setOnClickListener {
-                val pos = h.bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION && !busy) {
-                    index = pos
-                    show()
-                }
-            }
-            return h
-        }
-
-        override fun onBindViewHolder(h: StripHolder, position: Int) {
-            val p = photos[position]
-            val current = position == index
-            // 지금 보는 사진은 빨간 테두리
-            h.frame.setBackgroundColor(if (current) 0xFFE53935.toInt() else 0x00000000)
-            h.image.alpha = if (current) 1f else 0.6f
-            loadThumb(h.image, p)
-        }
-    }
-
-    /** 지금 사진이 썸네일 줄 가운데 오도록 스크롤. */
-    private fun centerStrip() {
-        stripAdapter.notifyDataSetChanged()
-        if (photos.isEmpty()) return
-        strip.post {
-            val item = (60 * resources.displayMetrics.density).toInt()
-            stripLayout.scrollToPositionWithOffset(index, (strip.width - item) / 2)
-        }
-    }
-
-    private fun showEmpty(msg: String) {
-        photoView.setImageDrawable(null)
-        emptyText.text = msg
-        emptyText.visibility = View.VISIBLE
-        counterText.text = if (trashedCount > 0) "휴지통으로 보낸 사진 ${trashedCount}장" else ""
-        infoText.text = ""
-        setButtonsEnabled(false)
+    private fun openViewer(pos: Int) {
+        if (pos !in photos.indices) return
+        index = pos
+        btnResume.visibility = View.GONE
+        showScreen(Screen.VIEWER)
+        setChromeVisible(true)
+        show()
     }
 
     private fun show() {
-        gridAdapter.notifyDataSetChanged()
         btnUndo.isEnabled = undoStack.isNotEmpty() && !busy
         btnUndo.alpha = if (btnUndo.isEnabled) 1f else 0.35f
+        stripAdapter.notifyDataSetChanged()
 
         if (photos.isEmpty()) {
-            showEmpty("정리할 사진이 없어요 🎉")
-            stripAdapter.notifyDataSetChanged()
+            photoView.setImageDrawable(null)
+            loading.visibility = View.GONE
+            emptyText.text = if (trashedCount > 0) "다 봤어요 🎉\n오늘 %,d장을 정리했어요".format(trashedCount) else "사진이 없어요"
+            emptyText.visibility = View.VISIBLE
+            counterText.text = ""
+            infoText.text = ""
+            listOf(btnTrash, btnKeep, btnPrev, btnFav).forEach { it.isEnabled = false }
             return
         }
         index = index.coerceIn(0, photos.size - 1)
         emptyText.visibility = View.GONE
-        setButtonsEnabled(true)
-        btnPrev.isEnabled = index > 0
-        btnPrev.alpha = if (btnPrev.isEnabled) 1f else 0.35f
+        listOf(btnTrash, btnKeep, btnFav).forEach { it.isEnabled = !busy }
+        btnPrev.isEnabled = index > 0 && !busy
 
         val p = photos[index]
-        counterText.text = buildString {
-            append("${index + 1} / ${photos.size}")
-            if (trashedCount > 0) append("   ·   🗑 $trashedCount")
-        }
-        infoText.text = "${DATE_FMT.format(Date(p.dateMillis))}  ·  ${Formatter.formatShortFileSize(this, p.size)}"
+        counterText.text = "%,d / %,d".format(index + 1, photos.size)
+        infoText.text = listOf(
+            DATE_FMT.format(Date(p.dateMillis)),
+            Formatter.formatShortFileSize(this, p.size),
+            PhotoLogic.folderDisplayName(p.bucketName),
+        ).joinToString("  ·  ")
+        btnFav.setIconResource(if (p.favorite) R.drawable.ic_heart else R.drawable.ic_heart_outline)
+        btnFav.iconTint = ColorStateList.valueOf(
+            ContextCompat.getColor(this, if (p.favorite) R.color.heart else R.color.text)
+        )
 
-        btnFav.text = if (p.favorite) "♥" else "♡"
-        btnFav.setTextColor(if (p.favorite) 0xFFFF5370.toInt() else 0xFFFFFFFF.toInt())
         displayImage(p)
         centerStrip()
-        // 다음 사진 미리 불러오기
         photos.getOrNull(index + 1)?.let { prefetch(it) }
-    }
-
-    private fun setButtonsEnabled(enabled: Boolean) {
-        listOf(btnTrash, btnKeep, btnPrev).forEach {
-            it.isEnabled = enabled
-            it.alpha = if (enabled) 1f else 0.35f
-        }
+        settings.lastPhotoId = p.id
     }
 
     private fun displayImage(p: Photo) {
@@ -932,7 +880,7 @@ class MainActivity : Activity() {
                 if (token != loadToken) return@post
                 loading.visibility = View.GONE
                 if (bmp != null) photoView.setImageBitmap(bmp)
-                else infoText.text = "${infoText.text}  ·  (미리보기 불가)"
+                else infoText.text = "${infoText.text}  ·  미리보기 불가"
             }
         }
     }
@@ -942,20 +890,16 @@ class MainActivity : Activity() {
         io.execute { decode(p) }
     }
 
-    /** 화면에 맞게 축소해서 디코딩 (EXIF 회전 자동 적용). */
+    /** 확대해도 선명하게: 화면의 2배(최대 4096px)까지 디코딩 (EXIF 회전 자동 적용) */
     private fun decode(p: Photo): Bitmap? {
         cache.get(p.id)?.let { return it }
         return try {
-            // 확대했을 때도 선명하게: 화면의 2배(최대 4096px)까지 디코딩
             val maxSide = resources.displayMetrics.let { minOf(maxOf(it.widthPixels, it.heightPixels) * 2, 4096) }
-            val src = ImageDecoder.createSource(contentResolver, p.uri)
-            val bmp = ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+            val bmp = ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, p.uri)) { d, info, _ ->
                 val w = info.size.width
                 val h = info.size.height
                 val scale = maxSide.toFloat() / maxOf(w, h)
-                if (scale < 1f) {
-                    decoder.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
-                }
+                if (scale < 1f) d.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
             }
             cache.put(p.id, bmp)
             bmp
@@ -976,7 +920,60 @@ class MainActivity : Activity() {
         show()
     }
 
-    // ---------------------------------------------------------------- 휴지통
+    // 썸네일 줄
+    private class StripHolder(val image: ShapeableImageView) : RecyclerView.ViewHolder(image)
+
+    private inner class StripAdapter : RecyclerView.Adapter<StripHolder>() {
+        private val dp by lazy { resources.displayMetrics.density }
+        override fun getItemCount() = photos.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StripHolder {
+            val size = (52 * dp).toInt()
+            val iv = ShapeableImageView(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams(size, size).apply {
+                    val m = (3 * dp).toInt()
+                    setMargins(m, (4 * dp).toInt(), m, (4 * dp).toInt())
+                }
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                val shape = ShapeAppearanceModel.builder().setAllCornerSizes(10 * dp).build()
+                shapeAppearanceModel = shape
+                // 배경도 같은 둥근 모양으로 (네모 모서리가 비치지 않게)
+                background = com.google.android.material.shape.MaterialShapeDrawable(shape).apply {
+                    fillColor = ColorStateList.valueOf(ContextCompat.getColor(context, R.color.surface2))
+                }
+                strokeColor = ColorStateList.valueOf(ContextCompat.getColor(context, R.color.primary))
+                val pad = (1.5f * dp).toInt()
+                setPadding(pad, pad, pad, pad)
+            }
+            val h = StripHolder(iv)
+            iv.setOnClickListener {
+                val pos = h.bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION && !busy) {
+                    index = pos
+                    show()
+                }
+            }
+            return h
+        }
+
+        override fun onBindViewHolder(h: StripHolder, position: Int) {
+            val current = position == index
+            h.image.strokeWidth = if (current) 2.5f * dp else 0f
+            h.image.alpha = if (current) 1f else 0.55f
+            loadThumb(h.image, photos[position])
+        }
+    }
+
+    /** 지금 사진이 썸네일 줄 가운데 오도록 */
+    private fun centerStrip() {
+        if (photos.isEmpty()) return
+        strip.post {
+            val item = (58 * resources.displayMetrics.density).toInt()
+            stripLayout.scrollToPositionWithOffset(index, (strip.width - item) / 2)
+        }
+    }
+
+    // ============================================================ 휴지통으로 보내기
 
     private fun trashCurrent() {
         if (photos.isEmpty() || busy) return
@@ -986,11 +983,10 @@ class MainActivity : Activity() {
     private fun trashSelected() {
         if (busy || selected.isEmpty()) return
         val list = photos.filter { it.id in selected }
-        if (list.isEmpty()) return
-        requestTrash(list)
+        if (list.isNotEmpty()) requestTrash(list)
     }
 
-    /** 미디어 관리 권한이 없으면 먼저 안내한 뒤 휴지통 요청. */
+    /** 미디어 관리 권한이 없으면 먼저 안내한 뒤 진행 */
     private fun requestTrash(list: List<Photo>) {
         if (Build.VERSION.SDK_INT >= 31 && !canManageMedia()) {
             showManageMediaDialog { startTrash(list) }
@@ -1002,7 +998,7 @@ class MainActivity : Activity() {
     private fun startTrash(list: List<Photo>) {
         if (busy) return
         trashQueue.clear()
-        trashBatch.clear()
+        trashedNow.clear()
         list.chunked(TRASH_CHUNK).forEach { trashQueue.addLast(it) }
         busy = true
         nextTrashChunk()
@@ -1016,8 +1012,9 @@ class MainActivity : Activity() {
         }
         pendingTrash = chunk
         try {
+            // '미디어 관리' 권한이 있으면 확인창 없이 바로 RESULT_OK 로 돌아온다
             val pi = MediaStore.createTrashRequest(contentResolver, chunk.map { it.uri }, true)
-            // '미디어 관리' 권한이 있으면 확인창 없이 바로 RESULT_OK 로 돌아온다.
+            @Suppress("DEPRECATION")
             startIntentSenderForResult(pi.intentSender, REQ_TRASH, null, 0, 0, 0)
         } catch (e: Exception) {
             pendingTrash = null
@@ -1027,39 +1024,26 @@ class MainActivity : Activity() {
         }
     }
 
-    /** 실제로 휴지통에 간 사진들을 목록에서 빼고 되돌리기 묶음으로 저장. */
     private fun finishTrash() {
         busy = false
-        if (trashBatch.isNotEmpty()) {
-            // 원래 위치를 기록하고 뒤에서부터 지워야 위치가 안 꼬인다
-            val withPos = trashBatch.map { (p, _) -> p to photos.indexOfFirst { it.id == p.id } }
-                .filter { it.second >= 0 }
-                .sortedBy { it.second }
-            withPos.asReversed().forEach { (p, pos) ->
-                photos.removeAt(pos)
-                selected.remove(p.id)
-                thumbCache.remove(p.id)
-                cache.remove(p.id)
+        if (trashedNow.isNotEmpty()) {
+            val ids = trashedNow.mapTo(HashSet()) { it.id }
+            allPhotos.removeAll { it.id in ids }
+            photos.removeAll { it.id in ids } // index 는 그대로 → 지운 자리에 다음 사진이 온다
+            selected.removeAll(ids)
+            ids.forEach { thumbCache.remove(it); cache.remove(it) }
+            undoStack.addLast(trashedNow.toList())
+            if (undoStack.size > 50) undoStack.removeFirst()
+            trashedCount += trashedNow.size
+            if (trashedNow.size > 1) {
+                Toast.makeText(this, "%,d장을 휴지통으로 보냈어요".format(trashedNow.size), Toast.LENGTH_SHORT).show()
             }
-            if (withPos.isNotEmpty()) {
-                undoStack.addLast(withPos)
-                if (undoStack.size > 50) undoStack.removeFirst()
-                trashedCount += withPos.size
-                if (withPos.size > 1) {
-                    Toast.makeText(this, "${withPos.size}장을 휴지통으로 보냈어요", Toast.LENGTH_SHORT).show()
-                }
-            }
-            trashBatch.clear()
+            trashedNow.clear()
+            folders = PhotoLogic.groupFolders(allPhotos)
+            rebuildRows()
         }
-        if (selectionMode && gridScreen.visibility == View.VISIBLE) {
-            setSelectionMode(false)
-        }
+        if (selectionMode) setSelectionMode(false)
         refresh()
-    }
-
-    /** 지금 보이는 화면을 다시 그린다. */
-    private fun refresh() {
-        if (viewerScreen.visibility == View.VISIBLE) show() else showGrid()
     }
 
     private fun undo() {
@@ -1068,7 +1052,8 @@ class MainActivity : Activity() {
         pendingRestore = last
         busy = true
         try {
-            val pi = MediaStore.createTrashRequest(contentResolver, last.map { it.first.uri }, false)
+            val pi = MediaStore.createTrashRequest(contentResolver, last.map { it.uri }, false)
+            @Suppress("DEPRECATION")
             startIntentSenderForResult(pi.intentSender, REQ_RESTORE, null, 0, 0, 0)
         } catch (e: Exception) {
             busy = false
@@ -1077,66 +1062,428 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun onRestoreResult(ok: Boolean) {
+        busy = false
+        val batch = pendingRestore ?: return
+        pendingRestore = null
+        if (ok) {
+            undoStack.removeLastOrNull()
+            val have = allPhotos.mapTo(HashSet()) { it.id }
+            batch.filter { it.id !in have }.forEach { PhotoLogic.insertSorted(allPhotos, it) }
+            trashedCount = (trashedCount - batch.size).coerceAtLeast(0)
+            folders = PhotoLogic.groupFolders(allPhotos)
+            applyFilters(batch.first().id)
+            Toast.makeText(this, "%,d장 복원했어요".format(batch.size), Toast.LENGTH_SHORT).show()
+        }
+        refresh()
+    }
+
+    // ============================================================ 즐겨찾기
+
+    private fun toggleFavorite() {
+        if (photos.isEmpty() || busy) return
+        val p = photos[index]
+        val value = !p.favorite
+        pendingFav = p to value
+        busy = true
+        try {
+            val pi = MediaStore.createFavoriteRequest(contentResolver, listOf(p.uri), value)
+            @Suppress("DEPRECATION")
+            startIntentSenderForResult(pi.intentSender, REQ_FAVORITE, null, 0, 0, 0)
+        } catch (e: Exception) {
+            busy = false
+            pendingFav = null
+            Toast.makeText(this, "즐겨찾기를 바꾸지 못했어요: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun onFavoriteResult(ok: Boolean) {
+        busy = false
+        val (p, value) = pendingFav ?: return
+        pendingFav = null
+        if (ok) {
+            // 즐겨찾기 보기에서 하트를 꺼도 바로 사라지지 않게 지금 목록에는 남겨둔다
+            val a = allPhotos.indexOfFirst { it.id == p.id }
+            if (a >= 0) allPhotos[a] = allPhotos[a].copy(favorite = value)
+            val i = photos.indexOfFirst { it.id == p.id }
+            if (i >= 0) photos[i] = photos[i].copy(favorite = value)
+            Toast.makeText(this, if (value) "즐겨찾기에 추가했어요" else "즐겨찾기에서 뺐어요", Toast.LENGTH_SHORT).show()
+            gridAdapter.notifyDataSetChanged()
+        }
+        refresh()
+    }
+
+    // ============================================================ 흐린 사진 찾기
+
+    private fun blurFile() = File(filesDir, "blur_scores.txt")
+
+    /** 이전에 계산해 둔 선명도 점수 불러오기 (다시 계산하지 않도록) */
+    private fun loadBlurCache() {
+        blurIo.execute {
+            try {
+                blurFile().takeIf { it.exists() }?.forEachLine { line ->
+                    val sp = line.indexOf(' ')
+                    if (sp > 0) {
+                        val id = line.substring(0, sp).toLongOrNull()
+                        val s = line.substring(sp + 1).toFloatOrNull()
+                        if (id != null && s != null) blurScores[id] = s
+                    }
+                }
+            } catch (e: Exception) {
+                // 캐시가 깨졌으면 그냥 다시 계산
+            }
+        }
+    }
+
+    /** 아직 점수가 없는 사진들의 선명도를 폰 안에서 계산 (결과는 파일에 저장) */
+    private fun ensureBlurScan() {
+        if (blurScanning) return
+        val snapshot = allPhotos.toList()
+        blurScanning = true
+        blurIo.execute {
+            val todo = snapshot.filter { !blurScores.containsKey(it.id) }
+            val total = todo.size
+            val out = StringBuilder()
+            var done = 0
+            for (p in todo) {
+                if (Thread.currentThread().isInterrupted) break
+                val s = scoreBlur(p)
+                blurScores[p.id] = s
+                out.append(p.id).append(' ').append(s).append('\n')
+                done++
+                if (done % 25 == 0 || done == total) {
+                    try {
+                        blurFile().appendText(out.toString())
+                    } catch (e: Exception) {
+                        // 저장 실패 시 다음에 다시 계산
+                    }
+                    out.setLength(0)
+                    val d = done
+                    main.post { onBlurProgress(d, total, finished = false) }
+                }
+            }
+            main.post { onBlurProgress(total, total, finished = true) }
+        }
+    }
+
+    private fun onBlurProgress(done: Int, total: Int, finished: Boolean) {
+        if (finished) blurScanning = false
+        if (viewMode != ViewMode.BLURRY) return
+        if (finished || total == 0) {
+            blurProgressBox.visibility = View.GONE
+        } else {
+            blurProgressBox.visibility = View.VISIBLE
+            blurProgressText.text = "흐린 사진 찾는 중  %,d / %,d".format(done, total)
+            blurProgress.max = total
+            blurProgress.setProgressCompat(done, true)
+        }
+        // 찾는 동안에도 조금씩 결과를 보여준다
+        if (finished || done % 200 == 0) {
+            applyFilters(photos.getOrNull(index)?.id)
+            refresh()
+        }
+    }
+
+    /** 선명도 점수 = 256px 썸네일 밝기의 라플라시안 분산 (낮을수록 흐림) */
+    private fun scoreBlur(p: Photo): Float = try {
+        var b = contentResolver.loadThumbnail(p.uri, Size(BLUR_SIZE, BLUR_SIZE), null)
+        if (b.config == Bitmap.Config.HARDWARE) b = b.copy(Bitmap.Config.ARGB_8888, false)
+        val scale = BLUR_SIZE.toFloat() / maxOf(b.width, b.height)
+        if (scale < 1f) {
+            b = Bitmap.createScaledBitmap(
+                b,
+                (b.width * scale).toInt().coerceAtLeast(3),
+                (b.height * scale).toInt().coerceAtLeast(3),
+                true,
+            )
+        }
+        val w = b.width
+        val h = b.height
+        val px = IntArray(w * h)
+        b.getPixels(px, 0, w, 0, 0, w, h)
+        val gray = IntArray(px.size) { i ->
+            val c = px[i]
+            (((c shr 16) and 0xFF) * 299 + ((c shr 8) and 0xFF) * 587 + (c and 0xFF) * 114) / 1000
+        }
+        PhotoLogic.laplacianVariance(gray, w, h).toFloat()
+    } catch (e: Exception) {
+        Float.MAX_VALUE // 읽지 못한 사진은 흐린 사진으로 치지 않음
+    }
+
+    // ============================================================ 휴지통 화면
+
+    private fun setupTrashScreen() {
+        trashGrid = findViewById(R.id.trashGrid)
+        trashTitle = findViewById(R.id.trashTitle)
+        trashEmpty = findViewById(R.id.trashEmpty)
+        trashLoading = findViewById(R.id.trashLoading)
+        btnTrashSelectAll = findViewById(R.id.btnTrashSelectAll)
+        btnRestoreSelected = findViewById(R.id.btnRestoreSelected)
+        btnDeleteForever = findViewById(R.id.btnDeleteForever)
+
+        trashGrid.adapter = trashAdapter
+        trashGrid.setOnItemClickListener { _, _, pos, _ ->
+            val id = binItems.getOrNull(pos)?.id ?: return@setOnItemClickListener
+            if (!binSelected.remove(id)) binSelected.add(id)
+            updateTrashHeader()
+        }
+        findViewById<View>(R.id.btnTrashBack).setOnClickListener { closeTrashScreen() }
+        btnTrashSelectAll.setOnClickListener {
+            if (binSelected.size == binItems.size) binSelected.clear() else binItems.forEach { binSelected.add(it.id) }
+            updateTrashHeader()
+        }
+        btnRestoreSelected.setOnClickListener {
+            val list = binItems.filter { it.id in binSelected }
+            if (list.isNotEmpty() && !busy) startBinRequests(REQ_BIN_RESTORE, list)
+        }
+        btnDeleteForever.setOnClickListener { confirmDeleteForever() }
+    }
+
+    private fun openTrashScreen() {
+        if (selectionMode) setSelectionMode(false)
+        showScreen(Screen.TRASH)
+        trashGrid.numColumns = gridLayout.spanCount
+        loadTrash()
+    }
+
+    private fun closeTrashScreen() {
+        binSelected.clear()
+        showGrid()
+    }
+
+    private fun loadTrash() {
+        trashLoading.visibility = View.VISIBLE
+        trashEmpty.visibility = View.GONE
+        io.execute {
+            val list = if (hasReadPermission()) MediaRepo.query(contentResolver, trashedOnly = true) else emptyList()
+            main.post {
+                binItems.clear()
+                binItems.addAll(list)
+                binSelected.retainAll(list.mapTo(HashSet()) { it.id })
+                trashLoading.visibility = View.GONE
+                updateTrashHeader()
+            }
+        }
+    }
+
+    private fun updateTrashHeader() {
+        trashAdapter.notifyDataSetChanged()
+        trashEmpty.visibility = if (binItems.isEmpty() && trashLoading.visibility != View.VISIBLE) View.VISIBLE else View.GONE
+        trashTitle.text = if (binSelected.isNotEmpty()) "%,d장 선택".format(binSelected.size) else "휴지통 %,d장".format(binItems.size)
+        btnTrashSelectAll.text = if (binItems.isNotEmpty() && binSelected.size == binItems.size) "선택 해제" else "전체 선택"
+        btnTrashSelectAll.isEnabled = binItems.isNotEmpty()
+        val on = binSelected.isNotEmpty() && !busy
+        btnRestoreSelected.isEnabled = on
+        btnDeleteForever.isEnabled = on
+        btnRestoreSelected.text = if (binSelected.isEmpty()) "복원" else "%,d장 복원".format(binSelected.size)
+        btnDeleteForever.text = if (binSelected.isEmpty()) "영구 삭제" else "%,d장 영구 삭제".format(binSelected.size)
+    }
+
+    private fun daysLeftLabel(p: Photo): String? {
+        if (p.expiresMillis <= 0) return null
+        val left = p.expiresMillis - System.currentTimeMillis()
+        if (left <= 0) return "곧 삭제"
+        val days = Math.ceil(left / 86_400_000.0).toInt()
+        return "${days.coerceAtLeast(1)}일 남음"
+    }
+
+    private fun confirmDeleteForever() {
+        val list = binItems.filter { it.id in binSelected }
+        if (list.isEmpty() || busy) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle("%,d장을 영구 삭제할까요?".format(list.size))
+            .setMessage("영구 삭제한 사진은 되돌릴 수 없어요.")
+            .setPositiveButton("영구 삭제") { _, _ -> startBinRequests(REQ_BIN_DELETE, list) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun startBinRequests(code: Int, list: List<Photo>) {
+        binQueue.clear()
+        binAffected.clear()
+        list.chunked(TRASH_CHUNK).forEach { binQueue.addLast(it) }
+        binCode = code
+        binDone = 0
+        busy = true
+        updateTrashHeader()
+        nextBinRequest()
+    }
+
+    private fun nextBinRequest() {
+        val chunk = binQueue.firstOrNull()
+        if (chunk == null) {
+            finishBinRequests()
+            return
+        }
+        try {
+            val uris = chunk.map { it.uri }
+            val pi = if (binCode == REQ_BIN_RESTORE) MediaStore.createTrashRequest(contentResolver, uris, false)
+            else MediaStore.createDeleteRequest(contentResolver, uris)
+            @Suppress("DEPRECATION")
+            startIntentSenderForResult(pi.intentSender, binCode, null, 0, 0, 0)
+        } catch (e: Exception) {
+            binQueue.clear()
+            Toast.makeText(this, "처리하지 못했어요: ${e.message}", Toast.LENGTH_SHORT).show()
+            finishBinRequests()
+        }
+    }
+
+    private fun onBinResult(ok: Boolean) {
+        val chunk = binQueue.removeFirstOrNull()
+        if (ok && chunk != null) {
+            binDone += chunk.size
+            chunk.forEach { binAffected.add(it.id) }
+            nextBinRequest()
+        } else {
+            binQueue.clear()
+            finishBinRequests()
+        }
+    }
+
+    private fun finishBinRequests() {
+        busy = false
+        if (binDone > 0) {
+            Toast.makeText(
+                this,
+                if (binCode == REQ_BIN_RESTORE) "%,d장 복원했어요".format(binDone) else "%,d장 영구 삭제했어요".format(binDone),
+                Toast.LENGTH_SHORT,
+            ).show()
+            // 처리된 사진은 '되돌리기' 기록에서 뺀다 (이미 복원됐거나 없어진 사진)
+            val pruned = undoStack.map { b -> b.filter { it.id !in binAffected } }.filter { it.isNotEmpty() }
+            undoStack.clear()
+            undoStack.addAll(pruned)
+            binSelected.clear()
+            if (binCode == REQ_BIN_RESTORE) loadAll()
+        }
+        binDone = 0
+        loadTrash()
+    }
+
+    private inner class TrashAdapter : BaseAdapter() {
+        override fun getCount() = binItems.size
+        override fun getItem(position: Int) = binItems[position]
+        override fun getItemId(position: Int) = binItems[position].id
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val cell = (convertView as? GridCell) ?: GridCell(this@MainActivity)
+            val p = binItems[position]
+            cell.setSelectionState(true, p.id in binSelected)
+            cell.setLabel(daysLeftLabel(p))
+            cell.setFavorite(false)
+            loadThumb(cell.image, p)
+            return cell
+        }
+    }
+
+    // ============================================================ 설정 화면
+
+    private fun setupSettingsScreen() {
+        swKeepZoom = findViewById(R.id.swKeepZoom)
+        swResume = findViewById(R.id.swResume)
+        tvSwipeSide = findViewById(R.id.tvSwipeSide)
+        tvSwipeUp = findViewById(R.id.tvSwipeUp)
+        tvSwipeDown = findViewById(R.id.tvSwipeDown)
+        tvBlur = findViewById(R.id.tvBlur)
+        tvManage = findViewById(R.id.tvManage)
+
+        findViewById<View>(R.id.btnSettingsBack).setOnClickListener { showGrid() }
+        findViewById<View>(R.id.rowKeepZoom).setOnClickListener { swKeepZoom.toggle() }
+        findViewById<View>(R.id.rowResume).setOnClickListener { swResume.toggle() }
+        swKeepZoom.setOnCheckedChangeListener { _, on ->
+            settings.keepZoom = on
+            photoView.keepZoomAcrossPhotos = on
+        }
+        swResume.setOnCheckedChangeListener { _, on -> settings.resume = on }
+
+        findViewById<View>(R.id.rowSwipeSide).setOnClickListener {
+            val labels = arrayOf("왼쪽으로 밀면 다음 사진", "왼쪽으로 밀면 이전 사진")
+            choose("옆으로 밀기", labels, if (settings.swipeReverse) 1 else 0) { settings.swipeReverse = it == 1 }
+        }
+        val actions = listOf(SwipeAction.TRASH, SwipeAction.FAVORITE, SwipeAction.GRID, SwipeAction.NONE)
+        val actionLabels = actions.map { it.label }.toTypedArray()
+        findViewById<View>(R.id.rowSwipeUp).setOnClickListener {
+            choose("위로 밀기", actionLabels, actions.indexOf(settings.swipeUp)) { settings.swipeUp = actions[it] }
+        }
+        findViewById<View>(R.id.rowSwipeDown).setOnClickListener {
+            choose("아래로 밀기", actionLabels, actions.indexOf(settings.swipeDown)) { settings.swipeDown = actions[it] }
+        }
+        findViewById<View>(R.id.rowBlur).setOnClickListener {
+            choose("흐린 사진 찾는 민감도", BLUR_LABELS, settings.blurSensitivity) {
+                settings.blurSensitivity = it
+                if (viewMode == ViewMode.BLURRY) applyFilters(null)
+            }
+        }
+        findViewById<View>(R.id.rowManage).setOnClickListener {
+            if (Build.VERSION.SDK_INT >= 31) requestManageMedia()
+        }
+        findViewById<TextView>(R.id.tvVersion).text = try {
+            "사진 정리 " + packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (e: Exception) {
+            "사진 정리"
+        }
+    }
+
+    private fun choose(title: String, labels: Array<String>, checked: Int, onPick: (Int) -> Unit) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setSingleChoiceItems(labels, checked) { d, which ->
+                onPick(which)
+                d.dismiss()
+                updateSettingsUi()
+                updateHint()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun openSettings() {
+        if (selectionMode) setSelectionMode(false)
+        showScreen(Screen.SETTINGS)
+        updateSettingsUi()
+    }
+
+    private fun updateSettingsUi() {
+        swKeepZoom.isChecked = settings.keepZoom
+        swResume.isChecked = settings.resume
+        tvSwipeSide.text = if (settings.swipeReverse) "← 이전" else "← 다음"
+        tvSwipeUp.text = settings.swipeUp.short.ifEmpty { "사용 안 함" }
+        tvSwipeDown.text = settings.swipeDown.short.ifEmpty { "사용 안 함" }
+        tvBlur.text = BLUR_LABELS[settings.blurSensitivity.coerceIn(0, 2)]
+        tvManage.text = when {
+            Build.VERSION.SDK_INT < 31 -> "지원 안 함"
+            canManageMedia() -> "켜짐"
+            else -> "꺼짐 · 켜기"
+        }
+    }
+
+    // ============================================================ 결과 처리
+
     @Deprecated("Activity API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        val ok = resultCode == RESULT_OK
         when (requestCode) {
-            REQ_BIN_RESTORE, REQ_BIN_DELETE -> onBinResult(resultCode == RESULT_OK)
-            REQ_FAVORITE -> onFavoriteResult(resultCode == RESULT_OK)
             REQ_TRASH -> {
                 val chunk = pendingTrash ?: return
                 pendingTrash = null
-                if (resultCode == RESULT_OK) {
-                    chunk.forEach { trashBatch.add(it to -1) }
+                if (ok) {
+                    trashedNow.addAll(chunk)
                     nextTrashChunk()
                 } else {
                     trashQueue.clear() // 사용자가 취소하면 남은 것도 중단
                     finishTrash()
                 }
             }
-            REQ_RESTORE -> {
-                busy = false
-                val batch = pendingRestore ?: return
-                pendingRestore = null
-                if (resultCode == RESULT_OK) {
-                    undoStack.removeLastOrNull()
-                    // 원래 위치 오름차순으로 다시 끼워 넣으면 제자리로 돌아간다
-                    batch.forEach { (p, pos) -> photos.add(pos.coerceIn(0, photos.size), p) }
-                    index = batch.first().second.coerceIn(0, photos.size - 1)
-                    trashedCount = (trashedCount - batch.size).coerceAtLeast(0)
-                    Toast.makeText(this, "${batch.size}장 복원했어요", Toast.LENGTH_SHORT).show()
-                }
-                refresh()
-            }
-        }
-    }
-
-    // ---------------------------------------------------------------- 스와이프
-
-    /** 확대하지 않은 상태에서: ← 다음, → 이전, ↑ 휴지통 */
-    private fun setupSwipe() {
-        val hint = findViewById<TextView>(R.id.hint)
-        val normalHint = hint.text
-        photoView.onZoomChanged = { zoomed ->
-            if (zoomed && photoView.keepZoomAcrossPhotos) {
-                hint.text = "🔍 확대 유지 중 — 다음 사진도 같은 부분이 확대돼요 · 더블탭: 해제"
-                hint.setTextColor(0xFFFFB300.toInt())
-            } else {
-                hint.text = normalHint
-                hint.setTextColor(0xFF777777.toInt())
-            }
-        }
-        photoView.onSwipe = { dx, dy ->
-            val min = 60 * resources.displayMetrics.density
-            when {
-                abs(dx) > abs(dy) && abs(dx) > min -> move(if (dx < 0) +1 else -1)
-                dy < -min && abs(dy) > abs(dx) -> trashCurrent()
-            }
+            REQ_RESTORE -> onRestoreResult(ok)
+            REQ_FAVORITE -> onFavoriteResult(ok)
+            REQ_BIN_RESTORE, REQ_BIN_DELETE -> onBinResult(ok)
         }
     }
 
     companion object {
         private const val THUMB = 320
+        private const val BLUR_SIZE = 256
         private const val MIN_COLUMNS = 2
         private const val MAX_COLUMNS = 8
         private const val TRASH_CHUNK = 500
@@ -1146,7 +1493,7 @@ class MainActivity : Activity() {
         private const val REQ_BIN_RESTORE = 4
         private const val REQ_BIN_DELETE = 5
         private const val REQ_FAVORITE = 6
-        private const val PREF_KEEP_ZOOM = "keep_zoom"
+        private val BLUR_LABELS = arrayOf("낮음", "보통", "높음")
         private val DATE_FMT = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA)
     }
 }

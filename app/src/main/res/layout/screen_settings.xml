@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/settingsScreen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:clickable="true"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="4dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSettingsBack"
+            style="@style/Widget.PhotoClean.IconButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="뒤로"
+            app:icon="@drawable/ic_back" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="설정"
+            android:textColor="@color/text"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="32dp">
+            <TextView style="@style/PhotoClean.SettingsSection" android:text="보기" />
+            <LinearLayout android:id="@+id/rowKeepZoom" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="확대 유지" />
+                    <TextView style="@style/PhotoClean.SettingsSub" android:text="확대한 부분을 다음 사진에서도 그대로 보여줘요" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/swKeepZoom"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowResume" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="이어서 보기" />
+                    <TextView style="@style/PhotoClean.SettingsSub" android:text="앱을 다시 켜면 마지막으로 보던 사진 위치로 이동해요" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/swResume"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+            <TextView style="@style/PhotoClean.SettingsSection" android:text="밀기 동작 (사진 크게 보기에서)" />
+            <LinearLayout android:id="@+id/rowSwipeSide" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="옆으로 밀기" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvSwipeSide" style="@style/PhotoClean.SettingsValue" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowSwipeUp" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="위로 밀기" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvSwipeUp" style="@style/PhotoClean.SettingsValue" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowSwipeDown" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="아래로 밀기" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvSwipeDown" style="@style/PhotoClean.SettingsValue" />
+            </LinearLayout>
+            <TextView style="@style/PhotoClean.SettingsSection" android:text="흐린 사진" />
+            <LinearLayout android:id="@+id/rowBlur" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="찾는 민감도" />
+                    <TextView android:id="@+id/rowBlurSub" style="@style/PhotoClean.SettingsSub" android:text="높을수록 살짝 흐린 사진까지 찾아요" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvBlur" style="@style/PhotoClean.SettingsValue" />
+            </LinearLayout>
+            <TextView style="@style/PhotoClean.SettingsSection" android:text="권한" />
+            <LinearLayout android:id="@+id/rowManage" style="@style/PhotoClean.SettingsRow">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView style="@style/PhotoClean.SettingsTitle" android:text="미디어 관리" />
+                    <TextView android:id="@+id/rowManageSub" style="@style/PhotoClean.SettingsSub" android:text="켜면 지울 때 확인창이 뜨지 않아요" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvManage" style="@style/PhotoClean.SettingsValue" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvVersion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="28dp"
+                android:textColor="@color/text3"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

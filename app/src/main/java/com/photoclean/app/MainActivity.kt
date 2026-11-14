@@ -422,6 +422,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
         setupGridPinch()
+        setupDragSelect()
 
         btnSelect.setOnClickListener { setSelectionMode(true) }
         findViewById<View>(R.id.btnSelCancel).setOnClickListener { setSelectionMode(false) }
@@ -626,6 +627,114 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 전체 보기에서 두 손가락으로 벌리면 크게(칸 수 ↓), 오므리면 작게(칸 수 ↑). */
+    // ------------------------------------------------------------ 끌어서 여러 장 선택
+
+    private var dragActive = false
+    private var dragAnchor = 0
+    private var dragCurrent = 0
+    private var dragSelecting = true
+    private var dragBase: Set<Long> = emptySet()
+    private var dragIds: List<Long> = emptyList()
+    private var dragX = 0f
+    private var dragY = 0f
+    private var dragScrollSpeed = 0
+
+    /** 화면 위/아래 끝에 손가락이 있으면 그쪽으로 계속 스크롤하며 선택을 넓힌다 */
+    private val dragAutoScroll = object : Runnable {
+        override fun run() {
+            if (!dragActive || dragScrollSpeed == 0) return
+            grid.scrollBy(0, dragScrollSpeed)
+            updateDragAt()
+            grid.postOnAnimation(this)
+        }
+    }
+
+    /** 길게 누른 사진에서 끌어서 선택 시작. 이미 선택된 사진에서 시작하면 끌어서 '해제' */
+    private fun startDragSelect(photoIndex: Int) {
+        if (photoIndex !in photos.indices) return
+        if (!selectionMode) setSelectionMode(true)
+        dragBase = selected.toSet()
+        dragIds = photos.map { it.id }
+        dragSelecting = photos[photoIndex].id !in dragBase
+        dragAnchor = photoIndex
+        dragCurrent = photoIndex
+        dragActive = true
+        grid.parent?.requestDisallowInterceptTouchEvent(true)
+        grid.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        applyDrag(photoIndex, force = true)
+    }
+
+    private fun applyDrag(current: Int, force: Boolean = false) {
+        if (!force && current == dragCurrent) return
+        val oldFrom = minOf(dragAnchor, dragCurrent)
+        val oldTo = maxOf(dragAnchor, dragCurrent)
+        dragCurrent = current
+        val next = PhotoLogic.dragSelect(dragBase, dragIds, dragAnchor, current, dragSelecting)
+        selected.clear()
+        selected.addAll(next)
+        // 바뀐 범위의 칸만 다시 그림
+        val from = minOf(oldFrom, dragAnchor, current).coerceIn(0, photos.size - 1)
+        val to = maxOf(oldTo, dragAnchor, current).coerceIn(0, photos.size - 1)
+        val rFrom = photoToRow[from]
+        val rTo = photoToRow[to]
+        gridAdapter.notifyItemRangeChanged(rFrom, rTo - rFrom + 1)
+        updateGridHeader()
+    }
+
+    /** 손가락 아래 사진까지 선택 범위 맞추기 (머리말·빈칸 위면 그대로) */
+    private fun updateDragAt() {
+        val child = grid.findChildViewUnder(dragX, dragY) ?: return
+        // 선택 모드로 바뀐 직후엔 다시 그리기 전이라 '그려진 위치'를 쓴다 (목록 순서는 그대로)
+        val pi = photoIndexAt(grid.getChildLayoutPosition(child)) ?: return
+        applyDrag(pi)
+    }
+
+    private fun updateDragAutoScroll() {
+        val dp = resources.displayMetrics.density
+        val edge = 80 * dp
+        val max = 24 * dp
+        val h = grid.height
+        val speed = when {
+            dragY < edge -> -((edge - dragY) / edge * max).toInt().coerceAtLeast(2)
+            dragY > h - edge -> ((dragY - (h - edge)) / edge * max).toInt().coerceAtLeast(2)
+            else -> 0
+        }
+        val wasIdle = dragScrollSpeed == 0
+        dragScrollSpeed = speed
+        if (wasIdle && speed != 0) grid.postOnAnimation(dragAutoScroll)
+    }
+
+    private fun endDragSelect() {
+        dragActive = false
+        dragScrollSpeed = 0
+        grid.removeCallbacks(dragAutoScroll)
+    }
+
+    private fun setupDragSelect() {
+        grid.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                if (!dragActive) return false
+                if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    endDragSelect()
+                    return false
+                }
+                return true // 길게 누른 뒤의 움직임은 스크롤 대신 선택으로
+            }
+
+            override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_MOVE -> {
+                        dragX = e.x
+                        dragY = e.y
+                        updateDragAt()
+                        updateDragAutoScroll()
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> endDragSelect()
+                }
+            }
+        })
+    }
+
     private fun setupGridPinch() {
         var acc = 1f
         val detector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -686,8 +795,8 @@ class MainActivity : AppCompatActivity() {
             }
             cell.setOnLongClickListener {
                 val pi = photoIndexAt(h.bindingAdapterPosition) ?: return@setOnLongClickListener false
-                if (!selectionMode) setSelectionMode(true)
-                toggleSelect(pi)
+                // 길게 누르고 그대로 끌면 지나간 사진이 모두 선택된다
+                startDragSelect(pi)
                 true
             }
             return h

@@ -104,7 +104,7 @@
             android:paddingStart="8dp"
             android:paddingTop="12dp"
             android:paddingEnd="12dp"
-            android:paddingBottom="56dp"
+            android:paddingBottom="48dp"
             android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
@@ -115,14 +115,27 @@
                 android:contentDescription="선택 취소"
                 app:icon="@drawable/ic_close" />
 
-            <TextView
-                android:id="@+id/selTitle"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:layout_weight="1"
-                android:textColor="@color/text"
-                android:textSize="24sp" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/selTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text"
+                    android:textSize="24sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="길게 누른 채 끌면 여러 장 선택"
+                    android:textColor="@color/text2"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSelectAll"

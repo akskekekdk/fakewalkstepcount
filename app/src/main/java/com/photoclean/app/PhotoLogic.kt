@@ -80,6 +80,22 @@ object PhotoLogic {
         else -> 80.0
     }
 
+    /**
+     * 끌어서 선택: 시작한 사진(anchor)부터 지금 손가락 아래 사진(current)까지를
+     * select 상태로 맞춘다. 항상 끌기 전 선택(base)에서 다시 계산하므로
+     * 손가락을 되돌리면 범위 밖 사진은 원래 상태로 돌아간다.
+     */
+    fun dragSelect(base: Set<Long>, ids: List<Long>, anchor: Int, current: Int, select: Boolean): Set<Long> {
+        val out = LinkedHashSet(base)
+        if (ids.isEmpty()) return out
+        val from = minOf(anchor, current).coerceIn(0, ids.size - 1)
+        val to = maxOf(anchor, current).coerceIn(0, ids.size - 1)
+        for (i in from..to) {
+            if (select) out.add(ids[i]) else out.remove(ids[i])
+        }
+        return out
+    }
+
     /** 최신순(날짜 내림차순, 같으면 id 내림차순)을 유지하며 끼워 넣기. */
     fun insertSorted(list: MutableList<Photo>, p: Photo) {
         var idx = list.indexOfFirst { it.dateMillis < p.dateMillis || (it.dateMillis == p.dateMillis && it.id < p.id) }

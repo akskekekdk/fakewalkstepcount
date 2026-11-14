@@ -87,4 +87,20 @@ class PhotoLogicTest {
         assertEquals(1L, f[0].cover.id)
         assertTrue(f.any { it.name == "카카오톡" } && f.any { it.name == "스크린샷" })
     }
+
+    @Test
+    fun dragSelectRangeFollowsFinger() {
+        val ids = (0L until 10L).toList()
+        val base = setOf(7L) // 끌기 전에 7번만 선택돼 있음
+        // 2번에서 시작해 5번까지 끌기 → 2~5 + 원래 7
+        assertEquals(setOf(2L, 3L, 4L, 5L, 7L), PhotoLogic.dragSelect(base, ids, 2, 5, true))
+        // 거꾸로(위로) 끌어도 같은 범위
+        assertEquals(setOf(0L, 1L, 2L, 7L), PhotoLogic.dragSelect(base, ids, 2, 0, true))
+        // 8번까지 넓혔다가 4번으로 되돌아오면 6~8은 원래 상태(7만 선택)로 복원
+        PhotoLogic.dragSelect(base, ids, 2, 8, true)
+        assertEquals(setOf(2L, 3L, 4L, 7L), PhotoLogic.dragSelect(base, ids, 2, 4, true))
+        // 선택된 사진에서 시작하면 끌어서 해제
+        val all = ids.toSet()
+        assertEquals(all - setOf(3L, 4L, 5L), PhotoLogic.dragSelect(all, ids, 3, 5, false))
+    }
 }

@@ -211,13 +211,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (web != null) web.onResume();
+        if (web != null) {
+            web.onResume();
+            try { web.evaluateJavascript("window.__resumeAudio&&window.__resumeAudio()", null); } catch (Exception ignore) {}
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (web != null) web.onPause();
+        // 앱을 끄거나 백그라운드로 가면 소리를 확실히 멈춘다
+        if (web != null) {
+            try { web.evaluateJavascript("window.__pauseAudio&&window.__pauseAudio()", null); } catch (Exception ignore) {}
+            web.onPause();
+        }
     }
 
     @Override

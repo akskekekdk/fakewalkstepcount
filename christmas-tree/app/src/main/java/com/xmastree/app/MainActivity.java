@@ -54,6 +54,9 @@ public class MainActivity extends Activity {
 
         hideSystemUi();
 
+        // 설치 세션이 이 액티비티를 새로 띄우며 상태를 넘겨줄 수 있다
+        handleInstallStatus(getIntent());
+
         // 실행할 때마다 조용히 새 버전 확인 (있으면 안내)
         ui.postDelayed(() -> checkForUpdate(false), 2500);
     }
@@ -173,21 +176,29 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (intent != null && Updater.ACTION_INSTALL_STATUS.equals(intent.getAction())) {
-            int status = intent.getIntExtra(
-                    android.content.pm.PackageInstaller.EXTRA_STATUS,
-                    android.content.pm.PackageInstaller.STATUS_FAILURE);
-            if (status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
-                Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
-                if (confirm != null) {
-                    try { startActivity(confirm); } catch (Exception ignore) {}
-                }
-            } else if (status == android.content.pm.PackageInstaller.STATUS_FAILURE_ABORTED) {
-                // 사용자가 취소 — 조용히 무시
-            } else if (status != android.content.pm.PackageInstaller.STATUS_SUCCESS) {
-                String m = intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE);
-                Toast.makeText(this, "설치 실패: " + (m == null ? status : m), Toast.LENGTH_LONG).show();
+        setIntent(intent);
+        handleInstallStatus(intent);
+    }
+
+    /** PackageInstaller 세션의 상태 처리 (onCreate / onNewIntent 양쪽에서 호출) */
+    private void handleInstallStatus(Intent intent) {
+        if (intent == null || !Updater.ACTION_INSTALL_STATUS.equals(intent.getAction())) return;
+        int status = intent.getIntExtra(
+                android.content.pm.PackageInstaller.EXTRA_STATUS,
+                android.content.pm.PackageInstaller.STATUS_FAILURE);
+        if (status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            // 시스템 설치 확인 화면을 띄운다
+            Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            if (confirm != null) {
+                try { startActivity(confirm); } catch (Exception ignore) {}
             }
+        } else if (status == android.content.pm.PackageInstaller.STATUS_SUCCESS) {
+            Toast.makeText(this, "업데이트가 완료됐어요 🎉", Toast.LENGTH_SHORT).show();
+        } else if (status == android.content.pm.PackageInstaller.STATUS_FAILURE_ABORTED) {
+            // 사용자가 취소 — 조용히 무시
+        } else if (status != android.content.pm.PackageInstaller.STATUS_FAILURE) {
+            String m = intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE);
+            Toast.makeText(this, "설치 실패: " + (m == null ? status : m), Toast.LENGTH_LONG).show();
         }
     }
 

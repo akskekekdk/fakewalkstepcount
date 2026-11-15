@@ -58,6 +58,7 @@
   <div>rotation <b id="sRot">0.00</b>°</div>
   <div>lights&nbsp;&nbsp;&nbsp;<b id="sLit">0</b></div>
   <div>letters&nbsp;&nbsp;<b id="sLet">0</b></div>
+  <div id="verLine" hidden>ver&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b id="sVer"></b></div>
 </div>
 <div class="banner" aria-hidden="true">
   <div class="words">
@@ -522,7 +523,8 @@ document.getElementById('btnReplay').addEventListener('click',replay);
 // 캔버스 탭 → 부서졌다 다시 생성 (+ 브라우저에선 소리 켜기)
 cv.addEventListener('pointerdown',e=>{ tryResumeAudio(); shatter(e.clientX,e.clientY); });
 if (window.AndroidApp){ const u=document.getElementById('btnUpd'); u.hidden=false;
-  u.addEventListener('click',()=>{ try{ window.AndroidApp.checkUpdate(); }catch(e){} }); }
+  u.addEventListener('click',()=>{ try{ window.AndroidApp.checkUpdate(); }catch(e){} });
+  try{ document.getElementById('sVer').textContent=window.AndroidApp.appVersion(); document.getElementById('verLine').hidden=false; }catch(e){} }
 window.addEventListener('resize',()=>{clearTimeout(window._rz); window._rz=setTimeout(resize,160);});
 
 let pending=2;

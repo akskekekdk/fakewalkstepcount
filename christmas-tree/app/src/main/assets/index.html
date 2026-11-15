@@ -54,12 +54,6 @@
 </style>
 
 <div id="stage"><canvas id="c"></canvas></div>
-<div class="hud">
-  <div>rotation <b id="sRot">0.00</b>°</div>
-  <div>lights&nbsp;&nbsp;&nbsp;<b id="sLit">0</b></div>
-  <div>letters&nbsp;&nbsp;<b id="sLet">0</b></div>
-  <div id="verLine" hidden>ver&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b id="sVer"></b></div>
-</div>
 <div class="banner" aria-hidden="true">
   <div class="words">
     <div class="word g"><span>M</span><span>E</span><span>R</span><span>R</span><span>Y</span></div>
@@ -90,13 +84,12 @@ const ROT_PERIOD = 26000;           // 한 바퀴 도는 시간(ms) — 천천�
 let treeCX,treeBaseY,treeTopY,treeHalf,faceR,treeFs;
 
 function computeLayout(){
-  treeCX=W*0.5; treeBaseY=H*0.875; treeTopY=H*0.455;
-  treeHalf=Math.min(W*0.25,(treeBaseY-treeTopY)*0.44);
-  const womanR=Math.min(W*0.235,H*0.165,165);  // 여자: 정중앙, 크게(주인공)
-  const dogR=Math.min(W*0.155,H*0.12,122);     // 강아지: 왼쪽, 작게
+  treeCX=W*0.5; treeBaseY=H*0.87; treeTopY=H*0.40;   // 트리: 중앙
+  treeHalf=Math.min(W*0.25,(treeBaseY-treeTopY)*0.43);
+  const R=Math.min(W*0.19,H*0.15,150);
   baubles=[
-    {cx:W*0.175, cy:H*0.325, R:dogR,   img:imgs.dog,   delay:5600},
-    {cx:W*0.5,   cy:H*0.195, R:womanR, img:imgs.woman, delay:4600}
+    {cx:W*0.2, cy:H*0.265, R:R, img:imgs.woman, delay:4900},  // 여자: 왼쪽
+    {cx:W*0.8, cy:H*0.265, R:R, img:imgs.dog,   delay:5300}   // 강아지: 오른쪽
   ];
   treeFs=Math.max(10,Math.min(15,Math.round(Math.min(W,H)/52)));
 }
@@ -398,14 +391,6 @@ function drawBgStars(time){
   ctx.restore();
 }
 
-const sRot=document.getElementById('sRot'), sLit=document.getElementById('sLit'), sLet=document.getElementById('sLet');
-function updateHud(el){
-  sRot.textContent=((el/ROT_PERIOD*360)%360).toFixed(2);
-  sLit.textContent=litCount;
-  let n=0; for(const p of parts) if(el>p.delay) n++;
-  sLet.textContent=n.toLocaleString();
-}
-
 let prevTs=0;
 function render(ts){
   const dt=Math.min(0.05,(ts-prevTs)/1000)||0.016; prevTs=ts;
@@ -428,24 +413,49 @@ function render(ts){
     drawLights(ts,elapsed,rot);
   }
   drawSnow(ts,dt);
-  if(started) updateHud(elapsed);
 }
 let lastFrame=0;
 function loop(ts){ requestAnimationFrame(loop); if(ts-lastFrame<30) return; lastFrame=ts; render(ts); }
 
 // ---------- audio: Jingle Bells ----------
-const F={C4:261.63,D4:293.66,E4:329.63,F4:349.23,G4:392.0,A4:440.0,B4:493.88,C5:523.25};
-const SONG=[
- ['E4',1],['E4',1],['E4',2], ['E4',1],['E4',1],['E4',2],
- ['E4',1],['G4',1],['C4',1],['D4',1], ['E4',4],
- ['F4',1],['F4',1],['F4',1],['F4',1], ['F4',1],['E4',1],['E4',1],['E4',0.5],['E4',0.5],
- ['E4',1],['D4',1],['D4',1],['E4',1], ['D4',2],['G4',2],
- ['E4',1],['E4',1],['E4',2], ['E4',1],['E4',1],['E4',2],
- ['E4',1],['G4',1],['C4',1],['D4',1], ['E4',4],
- ['F4',1],['F4',1],['F4',1],['F4',1], ['F4',1],['E4',1],['E4',1],['E4',0.5],['E4',0.5],
- ['G4',1],['G4',1],['F4',1],['D4',1], ['C4',4]
+function noteHz(n){
+  const m={C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+  const name=n.slice(0,-1), oct=+n.slice(-1);
+  return 440*Math.pow(2,((oct+1)*12+m[name]-69)/12);
+}
+// 대표 캐럴 3곡 — 켤 때마다 이 중 한 곡이 랜덤 재생
+const SONGS=[
+ { name:'Jingle Bells', beat:60/118, notes:[
+   ['E4',1],['E4',1],['E4',2], ['E4',1],['E4',1],['E4',2],
+   ['E4',1],['G4',1],['C4',1],['D4',1], ['E4',4],
+   ['F4',1],['F4',1],['F4',1],['F4',1], ['F4',1],['E4',1],['E4',1],['E4',0.5],['E4',0.5],
+   ['E4',1],['D4',1],['D4',1],['E4',1], ['D4',2],['G4',2],
+   ['E4',1],['E4',1],['E4',2], ['E4',1],['E4',1],['E4',2],
+   ['E4',1],['G4',1],['C4',1],['D4',1], ['E4',4],
+   ['F4',1],['F4',1],['F4',1],['F4',1], ['F4',1],['E4',1],['E4',1],['E4',0.5],['E4',0.5],
+   ['G4',1],['G4',1],['F4',1],['D4',1], ['C4',4], [null,2] ]},
+ { name:'Silent Night', beat:60/96, notes:[
+   ['G4',1.5],['A4',0.5],['G4',1],['E4',3],
+   ['G4',1.5],['A4',0.5],['G4',1],['E4',3],
+   ['D5',2],['D5',1],['B4',3],
+   ['C5',2],['C5',1],['G4',3],
+   ['A4',2],['A4',1],['C5',1.5],['B4',0.5],['A4',1],
+   ['G4',1.5],['A4',0.5],['G4',1],['E4',3],
+   ['A4',2],['A4',1],['C5',1.5],['B4',0.5],['A4',1],
+   ['G4',1.5],['A4',0.5],['G4',1],['E4',3],
+   ['D5',2],['D5',1],['F5',1.5],['D5',0.5],['B4',1],
+   ['C5',3],['E5',3],
+   ['C5',1.5],['G4',0.5],['E4',1],['G4',1.5],['F4',0.5],['D4',1],
+   ['C4',6], [null,3] ]},
+ { name:'Joy to the World', beat:60/114, notes:[
+   ['C5',1.5],['B4',0.5],['A4',1],['G4',1.5],['F4',0.5],['E4',1],['D4',1],['C4',2],
+   ['G4',1],['A4',1],['B4',1],['C5',2],['C5',0.5],['B4',0.5],['A4',1],
+   ['G4',1.5],['F4',0.5],['E4',1],['D4',1],['C4',1],
+   ['E4',1],['E4',1],['F4',1],['G4',2], ['D4',1],['D4',1],['E4',1],['F4',2],
+   ['E4',0.5],['E4',0.5],['E4',1],['E4',1],['D4',1],['C4',1],['D4',1],
+   ['E4',0.75],['D4',0.25],['C4',1],['C4',2], [null,2] ]}
 ];
-const BEAT=60/116;
+const song = SONGS[(Math.random()*SONGS.length)|0];
 let actx=null, master=null, seqIdx=0, nextTime=0, schedTimer=null, soundOn=true;
 function initAudio(){
   if(actx) return;
@@ -461,9 +471,9 @@ function initAudio(){
 function scheduler(){
   if(!actx || actx.state!=='running') return;
   while(nextTime<actx.currentTime+0.14){
-    const [nm,b]=SONG[seqIdx], dur=b*BEAT;
-    if(nm) playNote(F[nm],nextTime,dur);
-    nextTime+=dur; seqIdx=(seqIdx+1)%SONG.length;
+    const [nm,b]=song.notes[seqIdx], dur=b*song.beat;
+    if(nm) playNote(noteHz(nm),nextTime,dur);
+    nextTime+=dur; seqIdx=(seqIdx+1)%song.notes.length;
   }
 }
 function playNote(freq,time,dur){
@@ -523,8 +533,7 @@ document.getElementById('btnReplay').addEventListener('click',replay);
 // 캔버스 탭 → 부서졌다 다시 생성 (+ 브라우저에선 소리 켜기)
 cv.addEventListener('pointerdown',e=>{ tryResumeAudio(); shatter(e.clientX,e.clientY); });
 if (window.AndroidApp){ const u=document.getElementById('btnUpd'); u.hidden=false;
-  u.addEventListener('click',()=>{ try{ window.AndroidApp.checkUpdate(); }catch(e){} });
-  try{ document.getElementById('sVer').textContent=window.AndroidApp.appVersion(); document.getElementById('verLine').hidden=false; }catch(e){} }
+  u.addEventListener('click',()=>{ try{ window.AndroidApp.checkUpdate(); }catch(e){} }); }
 window.addEventListener('resize',()=>{clearTimeout(window._rz); window._rz=setTimeout(resize,160);});
 
 let pending=2;

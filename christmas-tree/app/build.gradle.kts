@@ -16,9 +16,23 @@ android {
         versionName = "1.$build"
     }
 
+    // 모든 빌드를 같은 키로 서명해야 앱 안에서 새 버전으로 업데이트할 수 있다.
+    signingConfigs {
+        create("shared") {
+            storeFile = file("signing/xmas.keystore")
+            storePassword = "android"
+            keyAlias = "xmas"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("shared")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("shared")
         }
     }
     compileOptions {

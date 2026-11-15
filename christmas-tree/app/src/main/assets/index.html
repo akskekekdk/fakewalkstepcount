@@ -77,6 +77,9 @@
     background:linear-gradient(180deg,#54d983,#2fae55); box-shadow:0 8px 24px rgba(47,174,85,.4)}
   .go:active{transform:scale(.97)}
   .hint{font-size:12px; color:#6f80a6}
+  .updbtn{margin-top:2px; background:none; border:none; color:#8fa0c4; font-family:inherit;
+    font-size:13px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; padding:6px}
+  .updbtn:active{color:#cdd8f3}
   .treehint{font-size:40px; filter:drop-shadow(0 0 18px rgba(80,220,140,.5))}
 </style>
 
@@ -115,6 +118,7 @@
     </div>
     <button class="go" id="go">▶ 시작하기</button>
     <div class="hint">소리가 함께 재생됩니다 🔊</div>
+    <button class="updbtn" id="btnUpd" hidden>⬆ 업데이트 확인</button>
   </div>
 </div>
 
@@ -463,4 +467,14 @@ img.onerror=()=>{ resize(); };
 img.src=FACE_SRC;
 resize();
 requestAnimationFrame(loop);
+
+// 안드로이드 앱(WebView)에서 실행 중이면 '업데이트 확인' 버튼 표시
+if (window.AndroidApp) {
+  const u = document.getElementById('btnUpd');
+  if (u) {
+    u.hidden = false;
+    try { u.textContent = '⬆ 업데이트 확인 · 현재 v' + window.AndroidApp.appVersion(); } catch(e) {}
+    u.addEventListener('click', () => { try { window.AndroidApp.checkUpdate(); } catch(e) {} });
+  }
+}
 </script>

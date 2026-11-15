@@ -1,29 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 투명 박스(유리 상자) 안에 ? -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 트렁크 -->
+
+    <!-- 박스 내부: 아주 옅은 유리 느낌 -->
     <path
-        android:pathData="M50,76 h8 v10 h-8 z"
-        android:fillColor="#7A4A1F" />
-    <!-- 트리 (3단) -->
+        android:pathData="M40,26 L68,26 A14,14 0 0 1 82,40 L82,68 A14,14 0 0 1 68,82 L40,82 A14,14 0 0 1 26,68 L26,40 A14,14 0 0 1 40,26 Z"
+        android:fillColor="#18FFFFFF" />
+
+    <!-- 박스 테두리: 어두운 외곽(대비) -->
     <path
-        android:pathData="M54,30 L70,52 L38,52 Z"
-        android:fillColor="#2FAE55" />
+        android:pathData="M40,26 L68,26 A14,14 0 0 1 82,40 L82,68 A14,14 0 0 1 68,82 L40,82 A14,14 0 0 1 26,68 L26,40 A14,14 0 0 1 40,26 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#0B1026"
+        android:strokeWidth="7"
+        android:strokeLineJoin="round" />
+    <!-- 박스 테두리: 밝은 선 -->
     <path
-        android:pathData="M54,42 L74,66 L34,66 Z"
-        android:fillColor="#2CA14E" />
+        android:pathData="M40,26 L68,26 A14,14 0 0 1 82,40 L82,68 A14,14 0 0 1 68,82 L40,82 A14,14 0 0 1 26,68 L26,40 A14,14 0 0 1 40,26 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#EAF1FF"
+        android:strokeWidth="3.5"
+        android:strokeLineJoin="round" />
+
+    <!-- ? 갈고리: 어두운 외곽 -->
     <path
-        android:pathData="M54,54 L78,80 L30,80 Z"
-        android:fillColor="#249444" />
-    <!-- 전구 몇 개 -->
-    <path android:pathData="M48,50 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#FF6B6B" />
-    <path android:pathData="M62,62 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#6CA8FF" />
-    <path android:pathData="M46,72 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#F2C14E" />
-    <!-- 별 -->
+        android:pathData="M43,45 C43,36 51,32 58,36 C66,40 65,50 57,55 C53,57 54,60 54,64"
+        android:fillColor="#00000000"
+        android:strokeColor="#0B1026"
+        android:strokeWidth="8.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- ? 갈고리: 밝은 선 -->
     <path
-        android:pathData="M54,16 L57,25 L66,25 L59,31 L61,40 L54,34 L47,40 L49,31 L42,25 L51,25 Z"
-        android:fillColor="#F2C94C" />
+        android:pathData="M43,45 C43,36 51,32 58,36 C66,40 65,50 57,55 C53,57 54,60 54,64"
+        android:fillColor="#00000000"
+        android:strokeColor="#EAF1FF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- ? 점: 어두운 외곽 -->
+    <path
+        android:pathData="M54,72.5 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z"
+        android:fillColor="#0B1026" />
+    <!-- ? 점: 밝은 -->
+    <path
+        android:pathData="M54,72.5 m-3.4,0 a3.4,3.4 0 1,0 6.8,0 a3.4,3.4 0 1,0 -6.8,0 Z"
+        android:fillColor="#EAF1FF" />
 </vector>

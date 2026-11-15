@@ -894,6 +894,12 @@ class MainActivity : AppCompatActivity() {
             zoomPill.visibility = if (zoomed && settings.keepZoom) View.VISIBLE else View.GONE
         }
         photoView.onSingleTap = { setChromeVisible(!chromeVisible) }
+        // 위/아래 막대 크기가 정해지거나 바뀌면 사진 자리를 다시 맞춘다
+        val relayout = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) photoView.post { updatePhotoInsets() }
+        }
+        viewerTopCard().addOnLayoutChangeListener(relayout)
+        viewerBottom.addOnLayoutChangeListener(relayout)
         photoView.onSwipe = { dx, dy ->
             val min = 60 * resources.displayMetrics.density
             when {
@@ -928,8 +934,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 위/아래 막대 보이기/숨기기 (사진만 크게 보기) */
+    /** 위쪽 막대의 크림색 판 (아래 '확대 유지 중' 알림은 제외) */
+    private fun viewerTopCard(): View = (viewerTop as ViewGroup).getChildAt(0)
+
+    /**
+     * 사진이 위/아래 막대에 가리지 않게 그 사이 공간에만 보여준다.
+     * 막대를 숨기면(사진 한 번 탭) 화면 전체를 쓴다.
+     */
+    private fun updatePhotoInsets() {
+        val gap = (6 * resources.displayMetrics.density).toInt()
+        val top = if (chromeVisible) viewerTop.paddingTop + viewerTopCard().height + gap else 0
+        val bottomLp = viewerBottom.layoutParams as ViewGroup.MarginLayoutParams
+        val bottom = if (chromeVisible) viewerBottom.height + bottomLp.bottomMargin + gap else 0
+        val lp = photoView.layoutParams as ViewGroup.MarginLayoutParams
+        if (lp.topMargin != top || lp.bottomMargin != bottom) {
+            lp.topMargin = top
+            lp.bottomMargin = bottom
+            photoView.layoutParams = lp
+        }
+    }
+
     private fun setChromeVisible(v: Boolean) {
         chromeVisible = v
+        updatePhotoInsets()
         listOf(viewerTop, viewerBottom).forEach { bar ->
             bar.animate().cancel()
             if (v) {

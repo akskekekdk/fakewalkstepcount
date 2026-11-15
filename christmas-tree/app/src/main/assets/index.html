@@ -76,7 +76,6 @@
 </div>
 <div class="sndhint" id="sndHint" hidden>🔊 화면을 한 번 탭하면 소리가 켜져요</div>
 <div class="topc">
-  <div class="cd" id="cd"></div>
   <div class="np" id="np"></div>
 </div>
 
@@ -774,7 +773,6 @@ window.addEventListener('resize',()=>{clearTimeout(window._rz); window._rz=setTi
 let pending=2;
 function imgDone(){ pending--; if(pending<=0){ resize(); start(); } }
 function loadImg(src,key){ const im=new Image(); im.onload=()=>{imgs[key]=im; imgDone();}; im.onerror=imgDone; im.src=src; }
-updateCountdown(); setInterval(updateCountdown, 3600000);
 resize(); requestAnimationFrame(loop);
 loadImg(FACE_DOG,'dog'); loadImg(FACE_WOMAN,'woman');
 </script>

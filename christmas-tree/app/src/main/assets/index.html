@@ -73,7 +73,6 @@
   <button id="btnSound" title="소리">🔊</button>
   <button id="btnReplay" title="다시">↻</button>
 </div>
-<div class="sndhint" id="sndHint" hidden>🔊 화면을 한 번 탭하면 소리가 켜져요</div>
 <div class="topc">
   <div class="np" id="np"></div>
 </div>
@@ -120,6 +119,8 @@ const TREECH="@#%&$*oO0xX=+:^WMKAB8?svzHND";
 const RAMP=" .,:;!=+*oxscnXMW8%@#";
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[(Math.random()*a.length)|0];
+const rgb=c=>'rgb('+(c[0]|0)+','+(c[1]|0)+','+(c[2]|0)+')';
+const lighten=(c,a)=>[Math.min(255,c[0]+a),Math.min(255,c[1]+a),Math.min(255,c[2]+a)];
 
 // 일반 입자(고정 좌표)
 function makePart(tx,ty,ch,r,g,b,kind,delay,fs,fromTop){
@@ -162,13 +163,14 @@ function buildOrnaments(){
 // 🎁 선물상자: 위에서 통통 떨어져 바닥에 쌓이고, 탭하면 열림
 function buildGifts(){
   gifts=[];
-  const cols=[[214,66,66],[74,132,236],[232,150,190],[86,196,120],[244,206,96]];
+  // 모던 뮤트 팔레트 (세이지/테라코타/더스티블루/머스터드/모브)
+  const cols=[[139,168,136],[201,123,99],[125,155,181],[223,194,120],[193,135,163]];
   const n=RM?3:5;
   for(let i=0;i<n;i++){
-    const w=treeHalf*rnd(0.34,0.5), h=w*rnd(0.72,0.86);
+    const w=treeHalf*rnd(0.36,0.5), h=w*rnd(0.78,0.9);
     const frac=(i+0.5)/n, cx=treeCX+(frac-0.5)*treeHalf*1.65;
     const y=treeBaseY - h + rnd(2,10);
-    gifts.push({x:cx-w/2, y, w, h, col:cols[i%cols.length], rib:[246,212,112],
+    gifts.push({x:cx-w/2, y, w, h, col:cols[i%cols.length], rib:[240,235,224],
       delay:7000+i*420+rnd(0,500), dur:1100, startY:(treeBaseY-h)-rnd(H*0.5,H*0.72),
       open:0, openT:-9999});
   }
@@ -187,22 +189,26 @@ function drawGifts(el,ts){
     const y=g.startY+(g.y-g.startY)*e;
     if(g.open && ts-g.openT>2600) g.open=0;
     const openP=g.open?Math.min(1,(ts-g.openT)/350):0;
-    const x=g.x,w=g.w,h=g.h,c=g.col,rib=g.rib;
+    const x=g.x,w=g.w,h=g.h,c=g.col,rib=g.rib, r=Math.min(9,w*0.14);
     ctx.save();
-    // 몸통
-    ctx.fillStyle='rgb('+c[0]+','+c[1]+','+c[2]+')'; rr(x,y+h*0.2,w,h*0.8,4); ctx.fill();
-    ctx.fillStyle='rgba(0,0,0,0.13)'; rr(x+w*0.52,y+h*0.2,w*0.48,h*0.8,4); ctx.fill();
-    ctx.fillStyle='rgb('+rib[0]+','+rib[1]+','+rib[2]+')'; ctx.fillRect(x+w*0.42,y+h*0.2,w*0.16,h*0.8);
-    // 뚜껑 (열리면 위로 들림)
-    const lcx=x+w/2, lcy=y+h*0.12-openP*h*0.62;
-    ctx.save(); ctx.translate(lcx,lcy); ctx.rotate(-openP*0.22);
-    ctx.fillStyle='rgb('+Math.min(255,c[0]+20)+','+Math.min(255,c[1]+20)+','+Math.min(255,c[2]+20)+')';
-    rr(-w*0.57,-h*0.13,w*1.14,h*0.27,4); ctx.fill();
-    ctx.fillStyle='rgb('+rib[0]+','+rib[1]+','+rib[2]+')'; ctx.fillRect(-w*0.08,-h*0.13,w*0.16,h*0.27);
-    // 리본 매듭 + 나비
-    ctx.beginPath(); ctx.ellipse(-w*0.15,-h*0.2,w*0.15,h*0.11,0.5,0,6.2832); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(w*0.15,-h*0.2,w*0.15,h*0.11,-0.5,0,6.2832); ctx.fill();
-    ctx.beginPath(); ctx.arc(0,-h*0.18,w*0.07,0,6.2832); ctx.fill();
+    // 부드러운 그림자
+    ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(x+w/2,y+h+3,w*0.46,3.5,0,0,6.2832); ctx.fill();
+    // 몸통(플랫 + 살짝 톤)
+    const bg=ctx.createLinearGradient(0,y+h*0.22,0,y+h);
+    bg.addColorStop(0,rgb(lighten(c,10))); bg.addColorStop(1,rgb(c));
+    ctx.fillStyle=bg; rr(x,y+h*0.22,w,h*0.78,r); ctx.fill();
+    // 얇은 세로 리본
+    ctx.fillStyle=rgb(rib); ctx.fillRect(x+w*0.45,y+h*0.22,w*0.1,h*0.78);
+    // 뚜껑(열리면 위로 들림)
+    const lcx=x+w/2, lcy=y+h*0.12-openP*h*0.58;
+    ctx.save(); ctx.translate(lcx,lcy); ctx.rotate(-openP*0.16);
+    ctx.fillStyle=rgb(lighten(c,16)); rr(-w*0.54,-h*0.12,w*1.08,h*0.22,r*0.8); ctx.fill();
+    ctx.fillStyle=rgb(rib); ctx.fillRect(-w*0.05,-h*0.12,w*0.1,h*0.22);
+    // 미니멀 매듭(얇은 고리 + 작은 점)
+    ctx.strokeStyle=rgb(rib); ctx.lineWidth=Math.max(1.5,w*0.035); ctx.lineCap='round';
+    ctx.beginPath(); ctx.ellipse(-w*0.1,-h*0.17,w*0.08,h*0.05,0.5,0,6.2832); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(w*0.1,-h*0.17,w*0.08,h*0.05,-0.5,0,6.2832); ctx.stroke();
+    ctx.fillStyle=rgb(rib); ctx.beginPath(); ctx.arc(0,-h*0.13,w*0.05,0,6.2832); ctx.fill();
     ctx.restore();
     ctx.restore();
   }
@@ -267,102 +273,81 @@ function drawSnowBank(dt){
 }
 // 🔥 벽난로 + 🧦 양말 (좌측 하단)
 function drawStocking(cx,topY,s,col,ts,i){
-  const sway=Math.sin(ts*0.002+i*1.7)*0.09;
+  const sway=Math.sin(ts*0.002+i*1.7)*0.07;
   ctx.save(); ctx.translate(cx,topY); ctx.rotate(sway);
-  ctx.strokeStyle='rgba(235,235,240,0.65)'; ctx.lineWidth=1.4;
-  ctx.beginPath(); ctx.moveTo(0,-s*0.55); ctx.lineTo(0,0); ctx.stroke();
-  ctx.fillStyle='rgb('+col.join(',')+')';
-  rr(-s*0.45,0,s*0.9,s*1.55,s*0.22); ctx.fill();
-  rr(-s*0.45,s*1.2,s*1.45,s*0.62,s*0.3); ctx.fill();
-  ctx.fillStyle='#eef3ff'; rr(-s*0.52,-s*0.14,s*1.04,s*0.42,s*0.14); ctx.fill();
+  ctx.strokeStyle='rgba(240,240,245,0.45)'; ctx.lineWidth=1.3;
+  ctx.beginPath(); ctx.moveTo(0,-s*0.5); ctx.lineTo(0,0); ctx.stroke();
+  ctx.fillStyle=rgb(col);
+  rr(-s*0.42,0,s*0.84,s*1.5,s*0.32); ctx.fill();           // 다리(둥글게)
+  rr(-s*0.42,s*1.18,s*1.3,s*0.58,s*0.33); ctx.fill();       // 발
+  ctx.fillStyle='#f2f4f8'; rr(-s*0.48,-s*0.1,s*0.96,s*0.36,s*0.16); ctx.fill(); // 크림 접단
   ctx.restore();
 }
 function roundClip(x,y,w,h,r){ rr(x,y,w,h,r); ctx.clip(); }
+// 🔥 모던/플랫 벽난로
 function drawFireplace(ts,el){
   const fade=Math.min(1,Math.max(0,(el-6000)/2500)); if(fade<=0) return;
-  const w=Math.min(W*0.26,120), h=w*1.0;
+  const w=Math.min(W*0.25,118), h=w*0.95;
   const baseY=H-(snowBank||0)*0.5-6, x=Math.max(10,W*0.03), y=baseY-h;
-  const ox=x+w*0.17, ow=w*0.66, oy=y+h*0.34, oh=h*0.6, ar=ow*0.5, fby=oy+oh-5, fcx=ox+ow/2;
+  const ox=x+w*0.18, ow=w*0.64, oy=y+h*0.32, oh=h*0.58, fby=oy+oh, fcx=ox+ow/2, orad=Math.min(12,ow*0.2);
   ctx.save(); ctx.globalAlpha=fade;
-  // 바닥으로 번지는 따뜻한 불빛
+  // 바닥 불빛(은은)
   const spill=ctx.createRadialGradient(fcx,fby,4,fcx,baseY,w*0.95);
-  spill.addColorStop(0,'rgba(255,165,75,0.26)'); spill.addColorStop(1,'rgba(255,120,40,0)');
-  ctx.fillStyle=spill; ctx.beginPath(); ctx.ellipse(fcx,baseY,w*0.9,h*0.42,0,0,6.2832); ctx.fill();
-  // 몸통(벽돌) + 그라데이션
-  const bg=ctx.createLinearGradient(x,y,x+w,y); bg.addColorStop(0,'#7c4536'); bg.addColorStop(1,'#5c342a');
-  ctx.fillStyle=bg; rr(x,y,w,h,9); ctx.fill();
-  // 엇갈린 벽돌 무늬
-  ctx.save(); roundClip(x,y,w,h,9);
-  ctx.strokeStyle='rgba(0,0,0,0.16)'; ctx.lineWidth=1;
-  const bh=h*0.135, bw=w*0.27;
-  let row=0; for(let ry=y; ry<y+h; ry+=bh,row++){ const off=(row%2)?bw/2:0;
-    ctx.beginPath(); ctx.moveTo(x,ry); ctx.lineTo(x+w,ry); ctx.stroke();
-    for(let bx=x-off; bx<x+w; bx+=bw){ ctx.beginPath(); ctx.moveTo(bx,ry); ctx.lineTo(bx,ry+bh); ctx.stroke(); } }
-  ctx.fillStyle='rgba(255,190,130,0.05)'; ctx.fillRect(x,y,w,h*0.45);
+  spill.addColorStop(0,'rgba(255,170,90,0.2)'); spill.addColorStop(1,'rgba(255,130,60,0)');
+  ctx.fillStyle=spill; ctx.beginPath(); ctx.ellipse(fcx,baseY,w*0.9,h*0.4,0,0,6.2832); ctx.fill();
+  // 프레임(플랫 차콜, 라운드)
+  const bg=ctx.createLinearGradient(0,y,0,y+h); bg.addColorStop(0,'#4e463f'); bg.addColorStop(1,'#39332d');
+  ctx.fillStyle=bg; rr(x,y,w,h,16); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.045)'; rr(x,y,w,h*0.42,16); ctx.fill();
+  // 선반(얇고 깔끔)
+  ctx.fillStyle='#5a524a'; rr(x-7,y-9,w+14,11,6); ctx.fill();
+  ctx.fillStyle='rgba(255,246,235,0.1)'; rr(x-7,y-9,w+14,3,6); ctx.fill();
+  // 아궁이(라운드)
+  ctx.fillStyle='#1b1712'; rr(ox,oy,ow,oh,orad); ctx.fill();
+  ctx.save(); rr(ox,oy,ow,oh,orad); ctx.clip();
+  const fg=ctx.createRadialGradient(fcx,fby,2,fcx,fby,ow*0.95);
+  fg.addColorStop(0,'rgba(255,198,112,0.95)'); fg.addColorStop(0.42,'rgba(255,142,70,0.55)'); fg.addColorStop(1,'rgba(255,100,50,0)');
+  ctx.fillStyle=fg; ctx.fillRect(ox,oy,ow,oh);
+  for(let i=0;i<3;i++){ const bx=fcx+(i-1)*ow*0.24, fl=oh*0.5*(0.6+0.4*Math.abs(Math.sin(ts*0.005+i*1.5))), fw=ow*0.22;
+    const lg=ctx.createLinearGradient(0,fby,0,fby-fl); lg.addColorStop(0,'rgba(255,214,140,0.92)'); lg.addColorStop(1,'rgba(255,150,80,0)');
+    ctx.fillStyle=lg; ctx.beginPath(); ctx.moveTo(bx-fw/2,fby); ctx.quadraticCurveTo(bx,fby-fl*0.85,bx,fby-fl); ctx.quadraticCurveTo(bx,fby-fl*0.85,bx+fw/2,fby); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle='#3a2a1c'; rr(ox+ow*0.18,fby-4,ow*0.64,4,2); ctx.fill();
   ctx.restore();
-  // 아치형 아궁이
-  ctx.fillStyle='#140a05';
-  ctx.beginPath(); ctx.moveTo(ox,oy+oh); ctx.lineTo(ox,oy+ar); ctx.arc(ox+ar,oy+ar,ar,Math.PI,0); ctx.lineTo(ox+ow,oy+oh); ctx.closePath(); ctx.fill();
-  const gl=ctx.createRadialGradient(fcx,fby,2,fcx,fby,ow*0.9);
-  gl.addColorStop(0,'rgba(255,210,110,0.92)'); gl.addColorStop(0.5,'rgba(255,125,45,0.42)'); gl.addColorStop(1,'rgba(255,80,20,0)');
-  ctx.fillStyle=gl; ctx.beginPath(); ctx.moveTo(ox,oy+oh); ctx.lineTo(ox,oy+ar); ctx.arc(ox+ar,oy+ar,ar,Math.PI,0); ctx.lineTo(ox+ow,oy+oh); ctx.closePath(); ctx.fill();
-  // 장작
-  ctx.fillStyle='#4a2d1a'; rr(ox+ow*0.13,fby-2,ow*0.74,5,2); ctx.fill();
-  ctx.fillStyle='#38230f'; rr(ox+ow*0.22,fby-6,ow*0.56,4,2); ctx.fill();
-  // 불꽃
-  for(let i=0;i<5;i++){ const bx=fcx+(i-2)*ow*0.14, fl=oh*0.46*(0.55+0.45*Math.abs(Math.sin(ts*0.006+i*1.3))), fw=ow*0.14;
-    const fg=ctx.createLinearGradient(0,fby,0,fby-fl);
-    fg.addColorStop(0,'rgba(255,232,145,0.96)'); fg.addColorStop(0.55,'rgba(255,145,55,0.85)'); fg.addColorStop(1,'rgba(255,90,30,0)');
-    ctx.fillStyle=fg; ctx.beginPath(); ctx.moveTo(bx-fw/2,fby);
-    ctx.quadraticCurveTo(bx-fw*0.2,fby-fl*0.6,bx,fby-fl); ctx.quadraticCurveTo(bx+fw*0.2,fby-fl*0.6,bx+fw/2,fby); ctx.closePath(); ctx.fill(); }
-  // 불씨
-  for(let i=0;i<6;i++){ const t=((ts*0.00045+i*0.37)%1), ex=fcx+Math.sin(i*2+ts*0.002)*ow*0.3, ey=fby-t*oh*0.72;
-    ctx.globalAlpha=fade*(1-t)*0.85; ctx.fillStyle='rgba(255,185,95,1)'; ctx.beginPath(); ctx.arc(ex,ey,1.3,0,6.2832); ctx.fill(); }
-  ctx.globalAlpha=fade;
-  // 선반
-  ctx.fillStyle='#8a5a3b'; rr(x-9,y-14,w+18,16,4); ctx.fill();
-  ctx.fillStyle='rgba(255,232,200,0.14)'; rr(x-9,y-14,w+18,5,4); ctx.fill();
-  // 선반 가랜드 + 빨간 열매
-  ctx.strokeStyle='#2c7a44'; ctx.lineWidth=3; ctx.lineCap='round';
-  ctx.beginPath(); for(let gx=x-5; gx<=x+w+5; gx+=6){ const gy=y-7+Math.sin((gx-x)*0.28)*3; gx===x-5?ctx.moveTo(gx,gy):ctx.lineTo(gx,gy);} ctx.stroke();
-  for(let gx=x; gx<=x+w; gx+=15){ ctx.fillStyle='#d94848'; ctx.beginPath(); ctx.arc(gx,y-6+Math.sin((gx-x)*0.28)*3,1.9,0,6.2832); ctx.fill(); }
-  // 양말
-  const cols=[[220,72,72],[72,152,222],[92,192,122]];
-  for(let i=0;i<3;i++) drawStocking(x+w*(0.27+i*0.23), y-7, w*0.095, cols[i], ts, i);
+  // 양말 2개(모던 뮤트)
+  const cols=[[197,123,99],[139,168,136]];
+  for(let i=0;i<2;i++) drawStocking(x+w*(0.33+i*0.34), y-6, w*0.1, cols[i], ts, i);
   ctx.restore();
 }
-// ⛄ 눈사람 (우측 하단)
+// ⛄ 모던/플랫 눈사람 (우측 하단)
 function drawSnowman(ts,el){
   const fade=Math.min(1,Math.max(0,(el-6500)/2500)); if(fade<=0) return;
   const u=Math.min(W*0.052,22);
   const baseY=H-(snowBank||0)*0.5-4, cx=W-Math.max(12,W*0.04)-u*1.3;
-  const bob=Math.sin(ts*0.0016)*1.5;
-  const botY=baseY-u*1.3+bob, midY=botY-u*2.0, headY=midY-u*1.45;
+  const bob=Math.sin(ts*0.0016)*1.2;
+  const botY=baseY-u*1.25+bob, midY=botY-u*1.95, headY=midY-u*1.4;
   ctx.save(); ctx.globalAlpha=fade;
-  // 그림자
-  ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(cx,baseY+2,u*1.5,u*0.4,0,0,6.2832); ctx.fill();
-  const body=(x,y,r)=>{ const g=ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.2,x,y,r);
-    g.addColorStop(0,'#ffffff'); g.addColorStop(1,'#cdd9ec'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill(); };
-  body(cx,botY,u*1.3); body(cx,midY,u*0.98); body(cx,headY,u*0.72);
-  // 단추
-  ctx.fillStyle='#3a3f4a'; for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(cx,midY-u*0.5+i*u*0.5,u*0.1,0,6.2832); ctx.fill(); }
-  // 팔(나뭇가지)
-  ctx.strokeStyle='#6e4a2c'; ctx.lineWidth=2; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(cx-u*0.9,midY-u*0.2); ctx.lineTo(cx-u*2.0,midY-u*0.8); ctx.moveTo(cx-u*1.5,midY-u*0.5); ctx.lineTo(cx-u*1.8,midY-u*1.1); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx+u*0.9,midY-u*0.2); ctx.lineTo(cx+u*2.0,midY-u*0.9); ctx.moveTo(cx+u*1.5,midY-u*0.55); ctx.lineTo(cx+u*1.85,midY-u*1.15); ctx.stroke();
-  // 목도리
-  ctx.fillStyle='#d64545'; rr(cx-u*0.7,headY+u*0.5,u*1.4,u*0.33,u*0.12); ctx.fill();
-  ctx.fillStyle='#b83535'; rr(cx+u*0.2,headY+u*0.7,u*0.33,u*0.9,u*0.1); ctx.fill();
-  // 눈 / 코 / 입
-  ctx.fillStyle='#2a2f38';
-  ctx.beginPath(); ctx.arc(cx-u*0.26,headY-u*0.1,u*0.1,0,6.2832); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx+u*0.26,headY-u*0.1,u*0.1,0,6.2832); ctx.fill();
-  ctx.fillStyle='#ef8a2b'; ctx.beginPath(); ctx.moveTo(cx,headY+u*0.04); ctx.lineTo(cx+u*0.7,headY+u*0.16); ctx.lineTo(cx,headY+u*0.22); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#2a2f38'; for(let i=0;i<4;i++){ ctx.beginPath(); ctx.arc(cx-u*0.28+i*u*0.19,headY+u*0.42,u*0.05,0,6.2832); ctx.fill(); }
-  // 모자
-  ctx.fillStyle='#2a2f38'; rr(cx-u*0.85,headY-u*0.72,u*1.7,u*0.22,u*0.08); ctx.fill();
-  rr(cx-u*0.55,headY-u*1.55,u*1.1,u*0.95,u*0.1); ctx.fill();
-  ctx.fillStyle='#d64545'; rr(cx-u*0.55,headY-u*0.95,u*1.1,u*0.2,u*0.06); ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,0.16)'; ctx.beginPath(); ctx.ellipse(cx,baseY+2,u*1.45,u*0.38,0,0,6.2832); ctx.fill();
+  const body=(x,y,r)=>{ const g=ctx.createRadialGradient(x-r*0.32,y-r*0.34,r*0.2,x,y,r);
+    g.addColorStop(0,'#ffffff'); g.addColorStop(1,'#d2dced'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill(); };
+  body(cx,botY,u*1.25); body(cx,midY,u*0.95); body(cx,headY,u*0.7);
+  // 팔(얇고 미니멀)
+  ctx.strokeStyle='#8a7258'; ctx.lineWidth=2; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(cx-u*0.85,midY-u*0.15); ctx.lineTo(cx-u*1.95,midY-u*0.85); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx+u*0.85,midY-u*0.15); ctx.lineTo(cx+u*1.95,midY-u*0.9); ctx.stroke();
+  // 단추(차콜)
+  ctx.fillStyle='#4a4f59'; for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(cx,midY-u*0.45+i*u*0.48,u*0.09,0,6.2832); ctx.fill(); }
+  // 목도리(테라코타)
+  ctx.fillStyle='#c97b63'; rr(cx-u*0.68,headY+u*0.52,u*1.36,u*0.3,u*0.14); ctx.fill();
+  ctx.fillStyle='#b26a53'; rr(cx+u*0.18,headY+u*0.72,u*0.3,u*0.85,u*0.1); ctx.fill();
+  // 눈 / 코
+  ctx.fillStyle='#2e2a28';
+  ctx.beginPath(); ctx.arc(cx-u*0.24,headY-u*0.08,u*0.09,0,6.2832); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx+u*0.24,headY-u*0.08,u*0.09,0,6.2832); ctx.fill();
+  ctx.fillStyle='#e09150'; ctx.beginPath(); ctx.moveTo(cx,headY+u*0.02); ctx.lineTo(cx+u*0.62,headY+u*0.14); ctx.lineTo(cx,headY+u*0.2); ctx.closePath(); ctx.fill();
+  // 모자(차콜 + 세이지 밴드)
+  ctx.fillStyle='#2e2a28'; rr(cx-u*0.82,headY-u*0.7,u*1.64,u*0.2,u*0.08); ctx.fill();
+  rr(cx-u*0.52,headY-u*1.5,u*1.04,u*0.9,u*0.12); ctx.fill();
+  ctx.fillStyle='#8ba888'; rr(cx-u*0.52,headY-u*0.92,u*1.04,u*0.18,u*0.05); ctx.fill();
   ctx.restore();
 }
 
@@ -770,7 +755,7 @@ function playNote(freq,time,dur){
   o.start(time); o.stop(time+dur+0.02); sub.start(time); sub.stop(time+dur+0.02);
 }
 const sndHint=document.getElementById('sndHint');
-function refreshHint(){ sndHint.hidden = !(soundOn && (!actx || actx.state!=='running')); }
+function refreshHint(){ if(sndHint) sndHint.hidden=true; }   // 안내 문구 사용 안 함
 function tryResumeAudio(){
   if(!actx) initAudio();
   if(actx && actx.state!=='running'){ actx.resume().then(()=>{nextTime=actx.currentTime+0.1; refreshHint();}).catch(()=>{}); }

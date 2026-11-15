@@ -1,6 +1,7 @@
 name: Build APK
 on:
   push:
+    branches: [ "ccr-4dcd77d9-i15w7d" ]
   workflow_dispatch:
 permissions:
   contents: write   # 릴리즈 만들기

@@ -59,19 +59,17 @@
     text-shadow:0 1px 3px rgba(0,0,0,.5); font-variant-numeric:tabular-nums}
   .np{font-size:12.5px; color:#d4e6ff; background:rgba(6,10,20,.42); border:1px solid var(--line);
     padding:5px 14px; border-radius:999px; backdrop-filter:blur(4px); opacity:0; transition:opacity .6s}
+  .updtl{position:fixed; top:calc(env(safe-area-inset-top,0px) + 14px);
+    left:calc(env(safe-area-inset-left,0px) + 14px); z-index:6; width:34px; height:34px;
+    border-radius:50%; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    font-size:15px; cursor:pointer; backdrop-filter:blur(6px); display:grid; place-items:center}
+  .updtl:active{transform:scale(.9)}
 </style>
 
 <div id="stage"><canvas id="c"></canvas></div>
-<div class="banner" aria-hidden="true">
-  <div class="words">
-    <div class="word g"><span>M</span><span>E</span><span>R</span><span>R</span><span>Y</span></div>
-    <div class="word r"><span>X</span><span>M</span><span>A</span><span>S</span></div>
-    <div class="word y"><span>2</span><span>0</span><span>2</span><span>6</span></div>
-  </div>
-</div>
+<button class="updtl" id="btnUpdTL" title="업데이트 확인" hidden>⬆</button>
 <div class="filebar"><span class="dot">●</span> christmas_tree.py · running · 30 fps</div>
 <div class="ctrls">
-  <button id="btnUpd" title="업데이트 확인" hidden>⬆</button>
   <button id="btnTheme" title="테마 바꾸기">🎨</button>
   <button id="btnSound" title="소리">🔊</button>
   <button id="btnReplay" title="다시">↻</button>
@@ -267,6 +265,42 @@ function drawSnowBank(dt){
   ctx.beginPath(); ctx.moveTo(0,H+2);
   for(let x=0;x<=W;x+=26){ const y=H-snowBank*(0.68+0.32*Math.sin(x*0.02+1)); ctx.lineTo(x,y); }
   ctx.lineTo(W,H+2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+// 🔥 벽난로 + 🧦 양말 (좌측 하단)
+function drawStocking(cx,topY,s,col,ts,i){
+  const sway=Math.sin(ts*0.002+i*1.7)*0.09;
+  ctx.save(); ctx.translate(cx,topY); ctx.rotate(sway);
+  ctx.strokeStyle='rgba(235,235,240,0.65)'; ctx.lineWidth=1.4;
+  ctx.beginPath(); ctx.moveTo(0,-s*0.55); ctx.lineTo(0,0); ctx.stroke();
+  ctx.fillStyle='rgb('+col.join(',')+')';
+  rr(-s*0.45,0,s*0.9,s*1.55,s*0.22); ctx.fill();
+  rr(-s*0.45,s*1.2,s*1.45,s*0.62,s*0.3); ctx.fill();
+  ctx.fillStyle='#eef3ff'; rr(-s*0.52,-s*0.14,s*1.04,s*0.42,s*0.14); ctx.fill();
+  ctx.restore();
+}
+function drawFireplace(ts,el){
+  const fade=Math.min(1,Math.max(0,(el-6000)/2500)); if(fade<=0) return;
+  const w=Math.min(W*0.27,128), h=w*0.9;
+  const baseY=H-(snowBank||0)*0.55-8, x=Math.max(8,W*0.02), y=baseY-h;
+  ctx.save(); ctx.globalAlpha=fade;
+  ctx.fillStyle='#6e3b2e'; rr(x,y,w,h,6); ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.lineWidth=1;
+  for(let by=y+h*0.26; by<y+h-2; by+=h*0.16){ ctx.beginPath(); ctx.moveTo(x+2,by); ctx.lineTo(x+w-2,by); ctx.stroke(); }
+  ctx.fillStyle='#8a5a3b'; rr(x-7,y-11,w+14,15,3); ctx.fill();
+  const ox=x+w*0.17, oy=y+h*0.32, ow=w*0.66, oh=h*0.62, fby=oy+oh-5, fcx=ox+ow/2;
+  ctx.fillStyle='#160b06'; rr(ox,oy,ow,oh,5); ctx.fill();
+  const gl=ctx.createRadialGradient(fcx,fby,2,fcx,fby,ow*0.78);
+  gl.addColorStop(0,'rgba(255,205,100,0.85)'); gl.addColorStop(0.5,'rgba(255,120,40,0.45)'); gl.addColorStop(1,'rgba(255,80,20,0)');
+  ctx.fillStyle=gl; ctx.fillRect(ox,oy,ow,oh);
+  ctx.fillStyle='#43291a'; rr(ox+ow*0.16,fby-1,ow*0.68,5,2); ctx.fill();
+  for(let i=0;i<5;i++){ const bx=fcx+(i-2)*ow*0.14, fl=oh*0.42*(0.55+0.45*Math.abs(Math.sin(ts*0.006+i*1.3))), fw=ow*0.13;
+    const fg=ctx.createLinearGradient(0,fby,0,fby-fl);
+    fg.addColorStop(0,'rgba(255,225,130,0.95)'); fg.addColorStop(0.6,'rgba(255,140,50,0.8)'); fg.addColorStop(1,'rgba(255,90,30,0)');
+    ctx.fillStyle=fg; ctx.beginPath(); ctx.moveTo(bx-fw/2,fby);
+    ctx.quadraticCurveTo(bx-fw*0.2,fby-fl*0.6,bx,fby-fl); ctx.quadraticCurveTo(bx+fw*0.2,fby-fl*0.6,bx+fw/2,fby); ctx.closePath(); ctx.fill(); }
+  const cols=[[214,70,70],[70,150,220],[90,190,120]];
+  for(let i=0;i<3;i++) drawStocking(x+w*(0.24+i*0.26), y-9, w*0.1, cols[i], ts, i);
   ctx.restore();
 }
 
@@ -578,6 +612,7 @@ function render(ts){
   if(started){
     drawBaubles(ts,elapsed);
     drawParts(ts,elapsed,rot);
+    drawFireplace(ts,elapsed);
     drawGifts(elapsed,ts);
     drawOrnaments(ts,elapsed,rot);
     drawLights(ts,elapsed,rot);
@@ -704,12 +739,22 @@ function replay(){
 }
 document.getElementById('btnSound').addEventListener('click',toggleSound);
 document.getElementById('btnReplay').addEventListener('click',replay);
-// 캔버스 탭 → 선물박스면 열기, 아니면 부서졌다 다시 생성 (+ 브라우저에선 소리 켜기)
+// 캔버스 탭 → 선물=열기 / 더블탭=폭죽 / 한 번 탭=부서졌다 재생성 (+ 브라우저에선 소리 켜기)
+let lastTapT=0, tapTimer=null;
 cv.addEventListener('pointerdown',e=>{
   tryResumeAudio();
-  const g=giftAt(e.clientX,e.clientY,elapsed);
-  if(g){ openGift(g,performance.now()); return; }
-  shatter(e.clientX,e.clientY);
+  const mx=e.clientX, my=e.clientY, now=performance.now();
+  const g=giftAt(mx,my,elapsed);
+  if(g){ openGift(g,now); lastTapT=0; if(tapTimer){clearTimeout(tapTimer);tapTimer=null;} return; }
+  if(now-lastTapT<280){                      // 더블탭 → 🎆 폭죽
+    if(tapTimer){ clearTimeout(tapTimer); tapTimer=null; }
+    lastTapT=0;
+    for(let k=0;k<3;k++){ const px=mx+rnd(-60,60), py=my+rnd(-55,45); setTimeout(()=>spawnFirework(px,py,null), k*150); }
+    return;
+  }
+  lastTapT=now;
+  if(tapTimer) clearTimeout(tapTimer);
+  tapTimer=setTimeout(()=>{ tapTimer=null; shatter(mx,my); }, 255);   // 단일 탭 → 부서짐(더블탭 판별용 지연)
 });
 // 🎨 테마 전환
 function setTheme(name){
@@ -722,7 +767,7 @@ document.getElementById('btnTheme').addEventListener('click',()=>{
   const i=THEME_ORDER.indexOf(themeName);
   setTheme(THEME_ORDER[(i+1)%THEME_ORDER.length]);
 });
-if (window.AndroidApp){ const u=document.getElementById('btnUpd'); u.hidden=false;
+if (window.AndroidApp){ const u=document.getElementById('btnUpdTL'); u.hidden=false;
   u.addEventListener('click',()=>{ try{ window.AndroidApp.checkUpdate(); }catch(e){} }); }
 window.addEventListener('resize',()=>{clearTimeout(window._rz); window._rz=setTimeout(resize,160);});
 

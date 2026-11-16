@@ -594,9 +594,6 @@ function drawBaubles(time,el){
     vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(6,10,20,0.5)');
     ctx.fillStyle=vg; ctx.fillRect(cx-R,cy-R,2*R,2*R);
     ctx.restore();
-    // 유리 하이라이트
-    ctx.globalAlpha=rev*0.45; ctx.fillStyle='rgba(255,255,255,0.9)';
-    ctx.beginPath(); ctx.ellipse(cx-R*0.34,cy-R*0.42,R*0.28,R*0.14,-0.5,0,6.2832); ctx.fill();
     // 테두리 링
     ctx.globalAlpha=rev*0.85; ctx.strokeStyle='rgba(220,230,255,0.55)'; ctx.lineWidth=1.6;
     ctx.beginPath(); ctx.arc(cx,cy,R,0,6.2832); ctx.stroke();

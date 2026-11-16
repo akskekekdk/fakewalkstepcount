@@ -18,7 +18,7 @@
     background:radial-gradient(120% 90% at 50% 16%,#0d1430 0%,var(--bg) 45%,var(--bg2) 100%);
     color:var(--ink); font-family:"Space Grotesk",system-ui,sans-serif; overflow:hidden;
     -webkit-tap-highlight-color:transparent;}
-  #stage{position:fixed; left:0; right:0; top:0; height:62%}
+  #stage{position:fixed; inset:0}
   canvas{display:block; width:100%; height:100%}
   .hud{position:fixed; top:env(safe-area-inset-top,0); left:0;
     padding:14px 0 0 max(16px,env(safe-area-inset-left,0px));
@@ -71,7 +71,6 @@
   .timer{position:fixed; top:calc(env(safe-area-inset-top,0px) + 13px); right:calc(env(safe-area-inset-right,0px) + 16px);
     z-index:5; font-family:ui-monospace,Menlo,monospace; font-size:13px; color:var(--gold);
     letter-spacing:.3px; text-shadow:0 1px 3px rgba(0,0,0,.6); font-variant-numeric:tabular-nums; pointer-events:none}
-  .ctrls{top:auto; bottom:calc(38% + 12px)}
   .stats{position:fixed; left:calc(env(safe-area-inset-left,0px) + 16px); bottom:calc(38% + 12px);
     z-index:4; pointer-events:none; font-family:ui-monospace,Menlo,monospace; font-size:11px;
     color:var(--muted); line-height:1.55; text-shadow:0 1px 3px rgba(0,0,0,.6)}
@@ -95,14 +94,7 @@
 </style>
 
 <div id="stage"><canvas id="c"></canvas></div>
-<div class="timer" id="timer">t 0.00s</div>
 <button class="updtl" id="btnUpdTL" title="업데이트 확인" hidden>⬆</button>
-<div class="stats" id="stats" aria-hidden="true">
-  <div class="handle">@porae_torae</div>
-  <div>rotation <b id="sRot">0.00</b>°</div>
-  <div>lights&nbsp;&nbsp;&nbsp;<b id="sLit">0</b></div>
-  <div>letters&nbsp;&nbsp;<b id="sLet">0</b></div>
-</div>
 <div class="ctrls">
   <button id="btnTheme" title="테마 바꾸기">🎨</button>
   <button id="btnSound" title="소리">🔊</button>
@@ -110,10 +102,6 @@
 </div>
 <div class="topc">
   <div class="np" id="np"></div>
-</div>
-<div class="codepanel" aria-hidden="true">
-  <div class="codebar"><span class="fname">christmas_tree.py</span><span class="run"><i></i>running · 30 fps</span></div>
-  <div class="codebody"><pre id="code"></pre></div>
 </div>
 
 <script>

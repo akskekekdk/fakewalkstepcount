@@ -296,12 +296,21 @@ function updDrawFx(ts,dt){
 // 🌨️ 바닥에 눈 쌓이기
 let snowBank=0;
 function drawSnowBank(dt){
-  snowBank=Math.min(H*0.052, snowBank+dt*5);
+  snowBank=Math.min(H*0.1, snowBank+dt*3.4);   // 더 높이, 천천히 점점 쌓임
   if(snowBank<1) return;
-  ctx.save(); ctx.fillStyle='rgba(236,243,255,0.92)';
+  ctx.save();
+  // 눈밭 (두 겹 물결로 자연스러운 눈더미)
+  const top=x=>H-snowBank*(0.6+0.26*Math.sin(x*0.016+1)+0.12*Math.sin(x*0.047+0.6));
+  ctx.fillStyle='rgba(224,233,248,0.96)';
   ctx.beginPath(); ctx.moveTo(0,H+2);
-  for(let x=0;x<=W;x+=26){ const y=H-snowBank*(0.68+0.32*Math.sin(x*0.02+1)); ctx.lineTo(x,y); }
+  for(let x=0;x<=W;x+=18) ctx.lineTo(x,top(x)+3);
   ctx.lineTo(W,H+2); ctx.closePath(); ctx.fill();
+  // 윗면 밝은 하이라이트
+  ctx.fillStyle='rgba(248,251,255,0.98)';
+  ctx.beginPath(); ctx.moveTo(0,H+2);
+  for(let x=0;x<=W;x+=18) ctx.lineTo(x,top(x));
+  for(let x=W;x>=0;x-=18) ctx.lineTo(x,top(x)+5);
+  ctx.closePath(); ctx.fill();
   ctx.restore();
 }
 // 🔥 벽난로 + 🧦 양말 (좌측 하단)
@@ -447,8 +456,11 @@ function buildLights(){
       delay:1400+(1-t)*2800+Math.random()*1400});
   }
 }
-function buildSnow(){ snow=[]; const n=RM?40:140;
-  for(let k=0;k<n;k++) snow.push({x:Math.random()*W,y:Math.random()*H,r:rnd(0.7,2.4),sp:rnd(12,45),dr:rnd(-14,14),ph:Math.random()*6.28}); }
+function buildSnow(){ snow=[]; const n=RM?70:270;
+  for(let k=0;k<n;k++){ const near=Math.random();    // 0 먼 눈 ~ 1 가까운 눈(원근 3겹 느낌)
+    snow.push({x:Math.random()*W, y:Math.random()*H,
+      r:rnd(0.6,1.1)+near*2.4, sp:rnd(9,22)*(0.5+near*1.6),
+      dr:rnd(-14,14)*(0.5+near), ph:Math.random()*6.28, a:0.3+near*0.6}); } }
 function buildBgStars(){ bgStars=[]; const n=Math.round(W*H/9000);
   for(let k=0;k<n;k++) bgStars.push({x:Math.random()*W,y:Math.random()*H*0.8,r:rnd(0.4,1.5),ph:Math.random()*6.28}); }
 
@@ -610,11 +622,12 @@ function drawBaubles(time,el){
 
 function drawSnow(time,dt){
   ctx.save(); ctx.fillStyle='#fff';
+  const top=H-(snowBank||0)*0.5;
   for(const s of snow){
     s.y+=s.sp*dt; s.x+=Math.sin(time*0.001+s.ph)*s.dr*dt;
-    if(s.y>H+4){s.y=-4; s.x=Math.random()*W;}
+    if(s.y>top-1){ s.y=-4; s.x=Math.random()*W; }   // 쌓인 눈 위로 떨어지면 다시 위에서
     if(s.x<-4)s.x=W+4; if(s.x>W+4)s.x=-4;
-    ctx.globalAlpha=0.5+0.4*Math.sin(time*0.003+s.ph);
+    ctx.globalAlpha=s.a*(0.7+0.3*Math.sin(time*0.003+s.ph));
     ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,6.2832); ctx.fill();
   }
   ctx.restore();
